@@ -38,6 +38,7 @@ Allowed values (fixed so runs group cleanly later): see `CHOICES` in `slidescan.
 | `detections.json` | ArUco corners per image, in pixels. Later used to map pixels to board coordinates. |
 | `geometry.json` | Per image: board-mm to pixel homography `H` (null if fewer than 2 markers), markers used, worst corner residual per marker in mm, targets fully in view. Written by `geometry.py`. |
 | `geometry_preview.jpg` | The board rectified from the best image, each target's position circled. Bolts inside their circles = mapping and positions agree. |
+| `sled.csv`, `sled_lanes.csv` | Sled runs only, typed in by hand: catch or pass per target per pull, and each pull's lane (see Phase 2: sled). |
 | `methods/<name>/` | A method's `candidates.json` (board mm, plus coverage) and `score.py`'s `results.json`; grazing also writes `heights.json`. |
 
 ## Phase 2: geometry
@@ -64,6 +65,17 @@ Photos per tripod position `NN`, all copied into `raw/`: `pNN_pose.jpg` (room li
 - **Targeted (`heights.json`, not scored):** per covered target, the shadow length beside it and the height from it, median over positions, next to `measured_mm`.
 - Height = L·z/(d + L), i.e. L·tan(elevation seen from the shadow tip), exact for a point light at height z with d from the light to the shadow's start.
 
+## Phase 2: sled (method 7)
+```
+python methods/sled.py runs/<run>                    # -> methods/sled/candidates.json (no images)
+python score.py runs/<run> --method sled --gate
+```
+Two files typed into the run folder, board mm as in `targets.json`:
+- `sled_lanes.csv`: `pull,x0_mm,y0_mm,x1_mm,y1_mm`, the rectangle the bridge swept on each pull. Targets with their center inside are covered; the lanes' area, summed per pull, is `covered_area_cm2`.
+- `sled.csv`: `target_id,pull,caught,x_mm,y_mm`, one row per pull for every target in that pull's lane, `caught` 1 or 0. A catch on nothing on the board: `target_id` blank, `caught` 1, and where it stopped in `x_mm,y_mm` (ruler).
+
+Rows and lanes must agree both ways, or the adapter refuses (a forgotten pass row would turn a miss into "not covered"). A target is a candidate only if every pull over it caught it; each catch on a decoy or on nothing is its own candidate (an alarm). Repeats are separate runs (`repeat` in `meta.json`), as for every method. For a sled run (`method` "sled" in `meta.json`), `slidescan.py check` wants `sled.csv` and `sled_lanes.csv` (validated by the adapter) instead of photos in `raw/` and `detections.json`; `score.py` doesn't need it.
+
 Setup: `pip install opencv-python pillow pillow-heif`
 
-Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`, `python test_grazing.py`
+Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`, `python test_grazing.py`, `python test_sled.py`

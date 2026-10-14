@@ -54,4 +54,17 @@ with tempfile.TemporaryDirectory() as tmp:
     meta["surface"] = "matte"  # typo must be caught
     (run / "meta.json").write_text(json.dumps(meta))
     assert any("meta.surface" in p for p in s.check(run))
+
+    # a sled run has typed CSVs instead of photos: no raw media, no detections.json needed
+    t.update(measured_mm=3.21)
+    (run / "targets.json").write_text(json.dumps(board))
+    meta.update(surface="matte-flat", method="sled")
+    (run / "meta.json").write_text(json.dumps(meta))
+    for f in (run / "raw").iterdir():
+        f.unlink()
+    (run / "detections.json").unlink()
+    (run / "sled_lanes.csv").write_text("pull,x0_mm,y0_mm,x1_mm,y1_mm\n1,0,0,20,20\n")
+    assert any("no sled.csv" in p for p in s.check(run)), s.check(run)
+    (run / "sled.csv").write_text("target_id,pull,caught,x_mm,y_mm\n" + "".join(f"{t['id']},1,0,,\n" for t in board["targets"]))
+    assert s.check(run) == [], s.check(run)
 print("ok")

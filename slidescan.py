@@ -6,7 +6,9 @@
   python slidescan.py check <run>                    -> lists anything missing; exit 1 if the run is incomplete
 """
 import argparse
+import contextlib
 import datetime
+import io
 import json
 import shutil
 import statistics
@@ -18,6 +20,8 @@ import cv2
 import numpy as np
 import pillow_heif
 from PIL import Image
+
+from methods import sled
 
 pillow_heif.register_heif_opener()  # lets PIL open iPhone HEIC photos
 
@@ -160,6 +164,13 @@ def check(run):
         problems += [f"target {t['id']}: {k} missing" for k in ("x_mm", "y_mm") if not isinstance(t.get(k), num)]
     for mk in board["markers"]:
         problems += [f"marker {mk['id']}: {k} missing" for k in ("x_mm", "y_mm") if not isinstance(mk.get(k), num)]
+    if meta.get("method") == "sled":  # no images: the typed CSVs, checked by the adapter itself
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                sled.run(run)  # ponytail: also rewrites methods/sled/candidates.json, derived and harmless
+        except SystemExit as e:
+            problems.append(str(e.code))
+        return problems
     if not any(f.suffix.lower() in VIDEO | STILL | HEIC for f in (run / "raw").iterdir()):
         problems.append("raw/ has no video or photos")
     det = run / "detections.json"
