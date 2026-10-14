@@ -1,0 +1,180 @@
+{
+  "board": "matte-flat-lean-v1",
+  "units": "mm. Origin = board bottom-left corner, x right, y up. Positions are centers (marker black square / target head).",
+  "positions": "planned_xy_mm is the design layout; x_mm/y_mm are measured after building and are what every tool uses. Board is 1220 x 610 mm; target-zone center is (610, 305).",
+  "height": "readings_mm = three caliper readings, perpendicular to the surrounding surface; measured_mm = their median. Qualifying target = measured_mm >= 3.2.",
+  "scale_ref": "lean board (333 x 349 mm): markers 0 and 1 are the scale reference, planned 122 mm apart, ruler-measured positions; the 1 m pair from the full layout does not fit",
+  "marker_dict": "DICT_4X4_50",
+  "marker_mm": 38.3,
+  "marker_orientation": "every marker square to the board, the edge its ID label was printed under toward -y",
+  "markers": [
+    {
+      "id": 0,
+      "planned_xy_mm": [
+        110,
+        305
+      ],
+      "x_mm": 108.16,
+      "y_mm": 95.25
+    },
+    {
+      "id": 1,
+      "planned_xy_mm": [
+        1110,
+        305
+      ],
+      "x_mm": 228.6,
+      "y_mm": 94.08
+    },
+    {
+      "id": 2,
+      "planned_xy_mm": [
+        370,
+        65
+      ],
+      "x_mm": 112.0,
+      "y_mm": 222.25
+    },
+    {
+      "id": 3,
+      "planned_xy_mm": [
+        490,
+        65
+      ],
+      "x_mm": 222.25,
+      "y_mm": 215.9
+    }
+  ],
+  "targets": [
+    {
+      "id": "T01",
+      "kind": "bolt",
+      "nominal_mm": 0,
+      "readings_mm": [
+        0,
+        0,
+        0
+      ],
+      "measured_mm": 0,
+      "planned_xy_mm": [
+        430,
+        485
+      ],
+      "x_mm": 288.93,
+      "y_mm": 34.24,
+      "note": "flush control"
+    },
+    {
+      "id": "T02",
+      "kind": "bolt",
+      "nominal_mm": 1,
+      "readings_mm": [
+        1,
+        1,
+        1
+      ],
+      "measured_mm": 1,
+      "planned_xy_mm": [
+        670,
+        245
+      ],
+      "x_mm": 165.1,
+      "y_mm": 34.24,
+      "note": ""
+    },
+    {
+      "id": "T04",
+      "kind": "bolt",
+      "nominal_mm": 3,
+      "readings_mm": [
+        3,
+        3.02,
+        2.98
+      ],
+      "measured_mm": 3,
+      "planned_xy_mm": [
+        790,
+        125
+      ],
+      "x_mm": 44.63,
+      "y_mm": 34.24,
+      "note": "just under the line; may be missed"
+    },
+    {
+      "id": "T05",
+      "kind": "bolt",
+      "nominal_mm": 3.2,
+      "readings_mm": [
+        3.2,
+        3.22,
+        3.18
+      ],
+      "measured_mm": 3.2,
+      "planned_xy_mm": [
+        550,
+        365
+      ],
+      "x_mm": 44.63,
+      "y_mm": 152.98,
+      "note": "re-measured 2026-10-14 after an earlier 3.0/3.2/3.4 set"
+    },
+    {
+      "id": "T06",
+      "kind": "bolt",
+      "nominal_mm": 4,
+      "readings_mm": [
+        3.98,
+        4,
+        4.02
+      ],
+      "measured_mm": 4,
+      "planned_xy_mm": [
+        670,
+        125
+      ],
+      "x_mm": 165.1,
+      "y_mm": 152.98,
+      "note": ""
+    },
+    {
+      "id": "T07",
+      "kind": "bolt",
+      "nominal_mm": 5,
+      "readings_mm": [
+        5.02,
+        5,
+        4.98
+      ],
+      "measured_mm": 5,
+      "planned_xy_mm": [
+        790,
+        365
+      ],
+      "x_mm": 288.93,
+      "y_mm": 152.98,
+      "note": ""
+    },
+    {
+      "id": "T08",
+      "kind": "bolt",
+      "nominal_mm": 10,
+      "readings_mm": [
+        10,
+        9.98,
+        10.02
+      ],
+      "measured_mm": 10,
+      "planned_xy_mm": [
+        670,
+        365
+      ],
+      "x_mm": 288.93,
+      "y_mm": 276.22,
+      "note": ""
+    }
+  ],
+  "board_size_mm": [
+    333.38,
+    349.25
+  ]
+}
