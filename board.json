@@ -1,7 +1,7 @@
 {
   "board": "matte-flat-lean-v1",
   "units": "mm. Origin = board bottom-left corner, x right, y up. Positions are centers (marker black square / target head).",
-  "positions": "planned_xy_mm is the design layout; x_mm/y_mm are measured after building and are what every tool uses. Board is 1220 x 610 mm; target-zone center is (610, 305).",
+  "positions": "planned_xy_mm is the full-board design layout (1220 x 610 mm, target-zone center (610, 305)); x_mm/y_mm are measured on the board in board_size_mm and are what every tool uses. light_ref_mm (lean board: its center) is the point meta.json's light fields are measured from.",
   "height": "readings_mm = three caliper readings, perpendicular to the surrounding surface; measured_mm = their median. Qualifying target = measured_mm >= 3.2.",
   "scale_ref": "lean board (333 x 349 mm): markers 0 and 1 are the scale reference, planned 122 mm apart, ruler-measured positions; the 1 m pair from the full layout does not fit",
   "marker_dict": "DICT_4X4_50",
@@ -176,5 +176,9 @@
   "board_size_mm": [
     333.38,
     349.25
+  ],
+  "light_ref_mm": [
+    166.69,
+    174.63
   ]
 }

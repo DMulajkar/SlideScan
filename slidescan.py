@@ -32,7 +32,7 @@ STILL = {".jpg", ".jpeg", ".png"}
 HEIC = {".heic", ".heif"}
 
 # Every field must be filled before a run counts; write "n/a" where a field does not apply.
-# Light fields describe the separate grazing light, measured at the target-zone center (610, 305):
+# Light fields describe the separate grazing light, measured at targets.json light_ref_mm (lean board: its center):
 # azimuth = direction from that center toward the light, degrees counterclockwise from board +x;
 # distance = horizontal distance from that center to the light; elevation = angle up from the board there.
 META = {

@@ -16,10 +16,10 @@ Everything later (signal tests, detectors) reads the run folders this produces, 
 python slidescan.py new practice          # -> runs/<date>_practice/
 ```
 1. Copy the phone video(s) or photos into `raw/` as they come off the phone. iPhone HEIC photos and HEVC `.mov` videos both work, so the camera can stay on **High Efficiency**: `frames` converts each HEIC to a JPG in `frames/` and leaves the original in `raw/`.
-2. Fill in `meta.json`. Every field except `notes` is required; write `n/a` where it doesn't apply (for example, the light fields when there is no separate light). The light fields are measured at the target-zone center (610, 305):
-   - `light_azimuth_deg`: direction from that center toward the light, degrees counterclockwise from board +x (after any board rotation)
-   - `light_distance_mm`: horizontal distance from that center to the light
-   - `light_elevation_deg`: angle from the board up to the light, seen from that center
+2. Fill in `meta.json`. Every field except `notes` is required; write `n/a` where it doesn't apply (for example, the light fields when there is no separate light). The light fields are measured from the board's `light_ref_mm` in `board.json` (lean board: its center, (166.69, 174.63); mark it in pencil):
+   - `light_azimuth_deg`: direction from that point toward the light, degrees counterclockwise from board +x (after any board rotation)
+   - `light_distance_mm`: horizontal distance from that point to the light
+   - `light_elevation_deg`: angle from the board up to the light, seen from that point
 3. If the board changed since the run was created, update the run's `targets.json`. It is a snapshot of `board.json`.
 ```
 python slidescan.py frames runs/<run>     # every 10th frame -> frames/, markers -> detections.json
@@ -38,6 +38,7 @@ Allowed values (fixed so runs group cleanly later): see `CHOICES` in `slidescan.
 | `detections.json` | ArUco corners per image, in pixels. Later used to map pixels to board coordinates. |
 | `geometry.json` | Per image: board-mm to pixel homography `H` (null if fewer than 2 markers), markers used, worst corner residual per marker in mm, targets fully in view. Written by `geometry.py`. |
 | `geometry_preview.jpg` | The board rectified from the best image, each target's position circled. Bolts inside their circles = mapping and positions agree. |
+| `methods/<name>/` | A method's `candidates.json` (board mm, plus coverage) and `score.py`'s `results.json`; grazing also writes `heights.json`. |
 
 ## Phase 2: geometry
 ```
@@ -51,6 +52,18 @@ python score.py runs/* --method grazing --gate   # -> methods/grazing/results.js
 ```
 Grades each run's `methods/<name>/candidates.json` (written by every method, board mm) against `targets.json`: a candidate within 10 mm (`--radius`) of a target is a hit, each target at most once; outcome per target is hit, miss or not covered; near a decoy (`D..`) is a decoy alarm, near nothing a background alarm. Runs whose `meta.json` match apart from date, repeat, operator and notes are repeats of one condition. The table shows hits/covered per measured height (k/n, never percentages) and the smallest height at and above which every covered target was hit in every repeat. `--gate` adds Gate A: zero misses on covered targets of 3.2 mm or taller, with the rule-of-three bound 3/n. Without `--method`, every method found is scored.
 
+## Phase 2: grazing light (method 6)
+```
+python slidescan.py frames runs/<run>                # markers (HEIC photos become JPGs in frames/)
+python geometry.py runs/<run>                        # mapping from each pNN_pose.jpg
+python methods/grazing.py runs/<run> [--l-min 5]     # -> methods/grazing/candidates.json + heights.json
+python score.py runs/<run> --method grazing --gate
+```
+Photos per tripod position `NN`, all copied into `raw/`: `pNN_pose.jpg` (room lights, for the markers), `pNN_off.jpg` and `pNN_on.jpg` (test lighting, grazing light off and on; exposure and focus locked, no touching the phone between them). The light fields in `meta.json` must be numbers. The adapter takes `on − off`, rectifies it to board mm, blanks every marker square (plus 3 mm), and marks as shadow whatever the light lit at under half the level of the board around it.
+- **Blind (`candidates.json`, scored):** every shadow reaching at least `--l-min` mm away from the light is a candidate at its bolt end, with `score` = that length and `est_height_mm`. One shadow seen from several positions is one candidate.
+- **Targeted (`heights.json`, not scored):** per covered target, the shadow length beside it and the height from it, median over positions, next to `measured_mm`.
+- Height = L·z/(d + L), i.e. L·tan(elevation seen from the shadow tip), exact for a point light at height z with d from the light to the shadow's start.
+
 Setup: `pip install opencv-python pillow pillow-heif`
 
-Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`
+Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`, `python test_grazing.py`
