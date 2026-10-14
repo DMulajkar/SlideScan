@@ -45,6 +45,12 @@ python geometry.py runs/<run>       # -> geometry.json + geometry_preview.jpg
 ```
 Needs a run that passes `check`. Prints how many images got a mapping, each marker's residual (over 2 mm is flagged: misplaced, rotated or mis-measured) and which targets were ever fully in view. One marker alone is not enough (`--min-markers`, default 2): on run B a single-marker mapping was up to 28 mm off. Other tools import `fit`, `to_pixel`, `to_board`, `in_view` and `crop` from it.
 
+## Phase 2: score
+```
+python score.py runs/* --method grazing --gate   # -> methods/grazing/results.json per run + k/n table + Gate A
+```
+Grades each run's `methods/<name>/candidates.json` (written by every method, board mm) against `targets.json`: a candidate within 10 mm (`--radius`) of a target is a hit, each target at most once; outcome per target is hit, miss or not covered; near a decoy (`D..`) is a decoy alarm, near nothing a background alarm. Runs whose `meta.json` match apart from date, repeat, operator and notes are repeats of one condition. The table shows hits/covered per measured height (k/n, never percentages) and the smallest height at and above which every covered target was hit in every repeat. `--gate` adds Gate A: zero misses on covered targets of 3.2 mm or taller, with the rule-of-three bound 3/n. Without `--method`, every method found is scored.
+
 Setup: `pip install opencv-python pillow pillow-heif`
 
-Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`
+Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`
