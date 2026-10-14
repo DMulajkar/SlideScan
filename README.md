@@ -36,7 +36,15 @@ Allowed values (fixed so runs group cleanly later): see `CHOICES` in `slidescan.
 | `targets.json` | Board snapshot: target readings, heights and positions, marker positions, `marker_mm`. |
 | `frames/` | Extracted frames, named `<video>_<frame index>.jpg` (time = index / fps), plus `<photo>.jpg` for each HEIC photo. Can be rebuilt from `raw/`. |
 | `detections.json` | ArUco corners per image, in pixels. Later used to map pixels to board coordinates. |
+| `geometry.json` | Per image: board-mm to pixel homography `H` (null if fewer than 2 markers), markers used, worst corner residual per marker in mm, targets fully in view. Written by `geometry.py`. |
+| `geometry_preview.jpg` | The board rectified from the best image, each target's position circled. Bolts inside their circles = mapping and positions agree. |
+
+## Phase 2: geometry
+```
+python geometry.py runs/<run>       # -> geometry.json + geometry_preview.jpg
+```
+Needs a run that passes `check`. Prints how many images got a mapping, each marker's residual (over 2 mm is flagged: misplaced, rotated or mis-measured) and which targets were ever fully in view. One marker alone is not enough (`--min-markers`, default 2): on run B a single-marker mapping was up to 28 mm off. Other tools import `fit`, `to_pixel`, `to_board`, `in_view` and `crop` from it.
 
 Setup: `pip install opencv-python pillow pillow-heif`
 
-Self-test (no camera needed): `python test_slidescan.py`
+Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`

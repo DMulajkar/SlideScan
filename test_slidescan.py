@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory() as tmp:
     (run / "meta.json").write_text(json.dumps(meta))
     board = json.loads((run / "targets.json").read_text())
     board["marker_mm"] = 40.0
+    board["markers"] = [{"id": i} for i in ids]  # the test page's markers, whatever the real board uses
     for t in board["targets"] + board["markers"]:
         t.update(x_mm=10.0, y_mm=10.0)
     for t in board["targets"]:
