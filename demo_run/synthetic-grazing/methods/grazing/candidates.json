@@ -1,0 +1,33 @@
+{
+  "candidates": [
+    {
+      "x_mm": 286.23,
+      "y_mm": 276.61,
+      "score": 32.9,
+      "est_height_mm": 10.05,
+      "image": "raw/p01_on.jpg"
+    },
+    {
+      "x_mm": 162.13,
+      "y_mm": 152.6,
+      "score": 15.54,
+      "est_height_mm": 4.01,
+      "image": "raw/p01_on.jpg"
+    },
+    {
+      "x_mm": 41.86,
+      "y_mm": 152.63,
+      "score": 14.56,
+      "est_height_mm": 3.15,
+      "image": "raw/p01_on.jpg"
+    }
+  ],
+  "covered_targets": [
+    "T01",
+    "T02",
+    "T05",
+    "T06",
+    "T08"
+  ],
+  "covered_area_cm2": 1085.3
+}

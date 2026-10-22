@@ -1,0 +1,42 @@
+{
+  "method": "grazing",
+  "radius_mm": 10.0,
+  "targets": {
+    "T01": {
+      "height_mm": 0,
+      "qualifying": false,
+      "outcome": "miss"
+    },
+    "T02": {
+      "height_mm": 1,
+      "qualifying": false,
+      "outcome": "miss"
+    },
+    "T05": {
+      "height_mm": 3.2,
+      "qualifying": true,
+      "outcome": "hit",
+      "dist_mm": 2.79,
+      "est_height_mm": 3.15
+    },
+    "T06": {
+      "height_mm": 4,
+      "qualifying": true,
+      "outcome": "hit",
+      "dist_mm": 2.99,
+      "est_height_mm": 4.01
+    },
+    "T08": {
+      "height_mm": 10,
+      "qualifying": true,
+      "outcome": "hit",
+      "dist_mm": 2.73,
+      "est_height_mm": 10.05
+    }
+  },
+  "decoy_alarms": {},
+  "background_alarms": 0,
+  "covered_area_cm2": 1085.3,
+  "decoy_alarms_per_100cm2": 0.0,
+  "background_alarms_per_100cm2": 0.0
+}

@@ -1,0 +1,39 @@
+{
+  "light_xyz_mm": [
+    766.7,
+    174.6,
+    160.8
+  ],
+  "targets": {
+    "T01": {
+      "measured_mm": 0,
+      "shadow_mm": 0,
+      "est_height_mm": 0.0,
+      "images": 1
+    },
+    "T02": {
+      "measured_mm": 1,
+      "shadow_mm": 4.09,
+      "est_height_mm": 1.05,
+      "images": 2
+    },
+    "T05": {
+      "measured_mm": 3.2,
+      "shadow_mm": 14.56,
+      "est_height_mm": 3.15,
+      "images": 2
+    },
+    "T06": {
+      "measured_mm": 4,
+      "shadow_mm": 15.43,
+      "est_height_mm": 3.98,
+      "images": 2
+    },
+    "T08": {
+      "measured_mm": 10,
+      "shadow_mm": 32.9,
+      "est_height_mm": 10.05,
+      "images": 1
+    }
+  }
+}

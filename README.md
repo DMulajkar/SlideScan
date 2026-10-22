@@ -76,6 +76,15 @@ Two files typed into the run folder, board mm as in `targets.json`:
 
 Rows and lanes must agree both ways, or the adapter refuses (a forgotten pass row would turn a miss into "not covered"). A target is a candidate only if every pull over it caught it; each catch on a decoy or on nothing is its own candidate (an alarm). Repeats are separate runs (`repeat` in `meta.json`), as for every method. For a sled run (`method` "sled" in `meta.json`), `slidescan.py check` wants `sled.csv` and `sled_lanes.csv` (validated by the adapter) instead of photos in `raw/` and `detections.json`; `score.py` doesn't need it.
 
-Setup: `pip install opencv-python pillow pillow-heif`
+## Phase 2: COLMAP free reconstruction (method 3)
+```
+python slidescan.py new vslam-test                   # copy one slow video sweep of the board into raw/; meta.json method "vslam-colmap"
+python slidescan.py frames runs/<run> --every 10     # frames/ + marker detections
+python methods/colmap.py runs/<run> [--h-min 2]      # -> methods/colmap/candidates.json + report.json (a few minutes)
+python score.py runs/<run> --method colmap --gate
+```
+Sweep: 30-60 s, phone 20-30 cm above the board, keep moving sideways (a pure rotation gives no baseline), bright light, all four markers in most frames. COLMAP reconstructs in arbitrary scale; the markers' triangulated corners are fitted to their `board.json` positions, so everything comes out in board mm with z = height above the marker plane. The printed report is the answer to "does a plain board reconstruct": frames registered, marker-corner residual (the accuracy floor), plane roughness, and per bolt the points on it and their height next to `measured_mm`. `max z` is outlier-prone; read `median z`. Needs `pip install pycolmap` (Windows wheels exist; no CUDA, sparse only).
 
-Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`, `python test_grazing.py`, `python test_sled.py`
+Setup: `pip install opencv-python pillow pillow-heif pycolmap`
+
+Self-tests (no camera needed): `python test_slidescan.py`, `python test_geometry.py`, `python test_score.py`, `python test_grazing.py`, `python test_sled.py`, `python test_colmap.py` (about a minute; best-case synthetic render, a ceiling, not a prediction)
