@@ -47,7 +47,7 @@ META = {
 OPTIONAL = {"notes"}
 # Fixed vocabularies so runs group cleanly later; a typo would split one condition into two.
 CHOICES = {
-    "method": {"practice", "apartment-pipeline", "grazing-light", "sled", "truedepth", "vslam-colmap", "lidar"},
+    "method": {"practice", "apartment-pipeline", "grazing-light", "sled", "truedepth", "vslam-colmap", "lidar", "walkaround"},
     "surface": {"matte-flat", "glossy-curved"},
     "light_level": {"bright", "dim", "near-dark"},
     "pass_type": {"static", "slow", "fast", "freehand"},
