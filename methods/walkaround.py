@@ -458,7 +458,7 @@ def draw_map(path, xs, ys, rel, targets, est, markers, msize, vmax=8.0):
 
 # -------------------------------------------------------------------------- driver
 def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma=6.0,
-        h_min=-3.0, h_max=12.0, step_t=0.25, step_b=0.5, grid_mm=3.0, roi_mm=14.0, roi_step=1.0,
+        h_min=-3.0, h_max=16.0, step_t=0.25, step_b=0.5, grid_mm=3.0, roi_mm=14.0, roi_step=1.0,
         patch_mm=3.0, patch_n=5, frac=0.7, min_score=0.4, min_views=4, cov_views=6,
         min_height=2.0, ref_win_mm=40.0, search_r=7.0, bg_r=9.0, marker_mm=None, marker_margin=3.0,
         dict_name="DICT_4X4_50", max_tag_images=None, max_tag_rms=3.0, min_tag_angle=1.5,
@@ -652,10 +652,15 @@ def main(argv=None):
     ap.add_argument("--marker-mm", type=float, help="printed marker side (default board.json, else 40)")
     ap.add_argument("--dict", dest="dict_name", default="DICT_4X4_50")
     ap.add_argument("--region", type=float, nargs=4, metavar=("X0", "Y0", "X1", "Y1"), help="blind: board region, mm")
+    ap.add_argument("--h-min", type=float, default=-3.0, help="lowest height swept, mm")
+    ap.add_argument("--h-max", type=float, default=16.0,
+                    help="highest height swept, mm. Heights read high, so a 10 mm bolt can come out near 14: "
+                         "keep this well above the tallest target (run B2 missed its 10 mm bolt at 12)")
     a = ap.parse_args(argv)
     run(a.run, board=a.board, mode=a.mode, max_views=a.max_views, max_width=a.max_width,
         min_score=a.min_score, min_height=a.min_height, grid_mm=a.grid_mm, patch_mm=a.patch_mm,
-        max_tag_images=a.max_tag_images, marker_mm=a.marker_mm, dict_name=a.dict_name, region=a.region)
+        max_tag_images=a.max_tag_images, marker_mm=a.marker_mm, dict_name=a.dict_name, region=a.region,
+        h_min=a.h_min, h_max=a.h_max)
 
 
 if __name__ == "__main__":

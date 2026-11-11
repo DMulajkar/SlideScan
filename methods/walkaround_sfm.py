@@ -47,7 +47,7 @@ def rigid_matrix(pose):
 
 
 def run(run_dir, images=None, every=1, matcher="auto", max_image_size=3200,
-        max_features=8192, camera_model="SIMPLE_RADIAL", overlap=15, focal_35mm=None):
+        max_features=8192, camera_model="SIMPLE_RADIAL", overlap=15, focal_35mm=None, threads=None):
     try:
         import pycolmap
     except ImportError:
@@ -84,6 +84,8 @@ def run(run_dir, images=None, every=1, matcher="auto", max_image_size=3200,
     ext = pycolmap.FeatureExtractionOptions()
     ext.max_image_size = max_image_size
     ext.sift.max_num_features = max_features
+    if threads:  # default (all cores) ran WSL out of memory on 4K frames; 4 is safe on 16 GB
+        ext.num_threads = threads
     # one lens for the whole video: self-calibrates from many views
     pycolmap.extract_features(db_path, src_dir, image_names=names,
                               camera_mode=pycolmap.CameraMode.SINGLE,
@@ -93,11 +95,17 @@ def run(run_dir, images=None, every=1, matcher="auto", max_image_size=3200,
     if matcher == "auto":
         matcher = "exhaustive" if len(names) <= 200 else "sequential"
     if matcher == "exhaustive":
-        pycolmap.match_exhaustive(db_path)
+        mopt = pycolmap.FeatureMatchingOptions()
+        if threads:
+            mopt.num_threads = threads
+        pycolmap.match_exhaustive(db_path, matching_options=mopt)
     else:
         pairing = pycolmap.SequentialPairingOptions()
         pairing.overlap = overlap
-        pycolmap.match_sequential(db_path, pairing_options=pairing)
+        mopt = pycolmap.FeatureMatchingOptions()
+        if threads:
+            mopt.num_threads = threads
+        pycolmap.match_sequential(db_path, matching_options=mopt, pairing_options=pairing)
     print(f"matching ({matcher}): {time.time() - t0:.0f} s")
 
     recs = pycolmap.incremental_mapping(db_path, src_dir, sparse_dir)
@@ -157,10 +165,11 @@ def main(argv=None):
                     choices=["SIMPLE_PINHOLE", "PINHOLE", "SIMPLE_RADIAL", "RADIAL", "OPENCV"])
     ap.add_argument("--focal-35mm", type=float,
                     help="35 mm-equivalent focal length as a starting guess (iPhone main camera: 26)")
+    ap.add_argument("--threads", type=int, help="CPU threads for COLMAP (default all; use 4 on 4K frames, 16 GB RAM)")
     a = ap.parse_args(argv)
     run(a.run, images=a.images, every=a.every, matcher=a.matcher,
         max_image_size=a.max_image_size, max_features=a.max_features, camera_model=a.camera_model,
-        focal_35mm=a.focal_35mm)
+        focal_35mm=a.focal_35mm, threads=a.threads)
 
 
 if __name__ == "__main__":

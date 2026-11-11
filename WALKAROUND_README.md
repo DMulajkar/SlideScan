@@ -95,6 +95,8 @@ motion blur, a rolling shutter, a real iPhone lens, and Windows. The apparent-si
 The first real run will be harder than the synthetic one; treat its number, not the synthetic one, as the result.
 
 ## Known limits
+- Heights are swept from `--h-min -3` to `--h-max 16` mm (the default was 12 until 2026-11-11). Heights read high by about 3-4 mm
+  on run B2, so a 10 mm bolt read 14 and was missed at 12. Keep `--h-max` well above the tallest target; a wider range is slower.
 - Heights are read from horizontal patches. Slanted or very glossy surfaces give weaker scores.
 - A bolt that occludes its neighbour in oblique views can bias the board reference next to it; the score uses the best 70% of views to blunt this.
 - Blind mode only scores cells seen by at least 6 of the used frames, and leaves out the marker squares (plus 3 mm) so markers cannot become detections.
