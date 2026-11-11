@@ -43,6 +43,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (run / "frames" / "photo.jpg").exists() and "frames/photo.jpg" in dets, "HEIC must become a readable JPG"
     assert s.check(run) == [], s.check(run)
 
+    meta.update(method="walkaround")  # an untextured board gives the walkaround nothing to match (run A's mistake)
+    (run / "meta.json").write_text(json.dumps(meta))
+    assert any("texture_help" in p for p in s.check(run)), s.check(run)
+    meta.update(texture_help="tape")
+    (run / "meta.json").write_text(json.dumps(meta))
+    assert s.check(run) == [], s.check(run)
+    meta.update(method="practice", texture_help="none")
+    (run / "meta.json").write_text(json.dumps(meta))
+
     t = board["targets"][0]
     t["readings_mm"] = [3.2, 3.2]  # only two readings
     (run / "targets.json").write_text(json.dumps(board))

@@ -41,6 +41,8 @@ Check first: `python test_walkaround.py --quick` (about 2 min) then `python test
 ```
 python slidescan.py new ...                       (existing; make the run, then add the video to raw/)
 python slidescan.py frames runs/<run> --every 3   (existing; about 10 frames per second)
+python slidescan.py check runs/<run>              (existing; every meta field filled, "n/a" for the light fields;
+                                                   texture_help must not be "none" for this method)
 python methods/walkaround_sfm.py runs/<run> --focal-35mm 26
 python methods/walkaround.py runs/<run>
 python score.py runs/<run> --method walkaround --gate
@@ -74,6 +76,9 @@ A target with a low score or "no local board" had nothing to match; add texture 
 | `... is WxH but COLMAP's camera is ...` | Frames changed or were rotated since `sfm.json` was written. Rerun step 1. |
 
 ## Assumptions I could not check (your files are on your PC, not here)
+*Update 2026-11-10: run A (`runs/2026-10-29_walkaround-a`) confirmed 1, 2 and 4 (the tag fit 16 corners, rms 1.51 mm) and
+3 (`walkaround` is now in `slidescan.py`'s method vocabulary). Run A's board had no added texture; `check` now rejects that.
+`score.py --gate` also prints how many targets under 2 mm were flagged, because Gate A alone cannot show that.*
 1. **`board.json` layout.** The loader wants a `markers` list of `{id, x_mm, y_mm}` (it falls back to `planned_xy_mm`)
    and a `marker_mm` size (default 40). It stops with a message naming the keys it found if that does not match.
 2. **`targets.json` layout.** A `targets` list (or a bare list) of `{id, x_mm, y_mm, measured_mm}`. IDs starting with `D` are decoys.

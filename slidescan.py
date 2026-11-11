@@ -149,6 +149,9 @@ def check(run):
             problems.append(f"meta.{k} is empty")
         elif k in CHOICES and v not in CHOICES[k]:
             problems.append(f"meta.{k} = {v!r}; expected one of {sorted(CHOICES[k])}")
+    if meta.get("method") == "walkaround" and meta.get("texture_help") == "none":
+        problems.append("meta.texture_help is 'none'; the walkaround method matches texture, so add tape or speckle "
+                        "to the board and set texture_help")
     board = json.loads((run / "targets.json").read_text())
     num = (int, float)
     if not isinstance(board.get("marker_mm"), num):

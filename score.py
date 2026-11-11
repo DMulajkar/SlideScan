@@ -20,6 +20,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 QUAL_MM = 3.2
+# ponytail: starting guess, same as walkaround's --min-height. Nothing is required below QUAL_MM, but a hit on a
+# flush or 1 mm bolt means the method flags a bump at every bolt without telling 0 from 5 mm, which Gate A cannot see.
+LOW_MM = 2.0
 # ponytail: starting guess. A 1/4 in bolt is 6.35 mm wide and mapped bolt heads land 1-6 mm off on the
 # practice runs; tune on real data with each hit's dist_mm in results.json.
 RADIUS_MM = 10.0
@@ -84,6 +87,12 @@ def smallest(cells):
     return best
 
 
+def low(cells):
+    """(hits, covered target-repeats) on targets under LOW_MM. Reported next to Gate A, not part of it."""
+    q = [v for h, v in cells.items() if h < LOW_MM]
+    return sum(v[0] for v in q), sum(v[1] for v in q)
+
+
 def gate(cells):
     """Gate A over one condition: (hits, n) on qualifying covered target-repeats, qualifying not covered."""
     q = [v for h, v in cells.items() if h >= QUAL_MM]
@@ -123,13 +132,18 @@ def report(runs, method, radius=RADIUS_MM, show_gate=False):
               + f"  {(fmt(s) + ' mm') if s is not None else 'none':>17}  {f'{dec}/{bg}':>15}  {rate:>11}")
     if show_gate:
         print(f"\nGate A: zero misses on qualifying targets (measured >= {QUAL_MM:g} mm) that were covered, in every repeat")
-        print(f"{'condition':<{w}}  reps  hits/n  not covered  result  95% bound on miss rate")
+        print(f"{'condition':<{w}}  reps  hits/n  not covered  hits <{LOW_MM:g} mm  result  95% bound on miss rate")
         for label, res, c in zip(labels, groups.values(), cells):
             k, n, nc = gate(c)
             ok = n and k == n
             # rule of three: zero misses in n independent trials -> 95% upper bound about 3/n (rough below n = 30)
             bound = f"<= 3/{n} = {3 / n:.2f} (rule of three)" if ok else "-"
-            print(f"{label:<{w}}  {len(res):>4}  {f'{k}/{n}':>6}  {nc:>11}  {'PASS' if ok else 'FAIL':>6}  {bound}")
+            lk, ln = low(c)
+            print(f"{label:<{w}}  {len(res):>4}  {f'{k}/{n}':>6}  {nc:>11}  {f'{lk}/{ln}':>{9 + len(f'{LOW_MM:g}')}}  "
+                  f"{'PASS' if ok else 'FAIL':>6}  {bound}")
+            if lk:
+                print(f"{'':<{w}}  note: {lk} of {ln} covered targets under {LOW_MM:g} mm were flagged, so a PASS here "
+                      f"does not show the method separates a flush bolt from a real protrusion")
     return groups
 
 

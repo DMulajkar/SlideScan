@@ -81,6 +81,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "1/2" in gate_rows and "FAIL" in gate_rows, gate_rows
     assert "%" not in text.replace("95% bound", ""), "k/n counts only, never bare percentages"
 
+# low-height hits: reported next to Gate A, and the note appears only when one happened
+assert sc.low({0: [1, 1, 0], 1: [0, 1, 0], 3.2: [2, 2, 0]}) == (1, 2) and sc.low({3.2: [1, 1, 0]}) == (0, 0)
+with tempfile.TemporaryDirectory() as tmp:
+    run = Path(tmp) / "r5"
+    (run / "methods" / "test").mkdir(parents=True)
+    (run / "targets.json").write_text(json.dumps(BOARD))
+    (run / "meta.json").write_text(json.dumps(META))
+    (run / "methods" / "test" / "candidates.json").write_text(json.dumps(
+        {"candidates": [cand(50, 50), cand(50, 150)], "covered_targets": ALL, "covered_area_cm2": 100}))  # flush T01 and T05
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        sc.report([run], "test", show_gate=True)
+    g = out.getvalue().split("Gate A")[1]
+    assert "hits <2 mm" in g and "1/1" in g and "PASS" in g and "does not show the method separates" in g, g
+assert "does not show the method separates" not in text, "no low hits in the main fixture, so no note"
+
 # monotone: a lucky 1 mm hit does not undercut a 4 mm miss; a missed tallest height means none
 assert sc.smallest({1: [1, 1, 0], 4: [0, 1, 0], 10: [1, 1, 0]}) == 10
 assert sc.smallest({3.2: [1, 1, 0], 10: [0, 1, 0]}) is None
