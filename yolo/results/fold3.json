@@ -1,0 +1,160 @@
+{
+ "held_out": "11-11_tex2",
+ "epochs": 25,
+ "model": "yolo11n.pt",
+ "results": {
+  "w1920|conf0.05": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 181,
+   "found_iou50": 178,
+   "false_per_image": 0.35,
+   "proposals_per_image": 3.27,
+   "per_target": {
+    "T01": "21/21",
+    "T02": "32/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "36/36",
+    "T07": "32/32",
+    "T08": "22/22"
+   }
+  },
+  "w1920|conf0.25": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 179,
+   "found_iou50": 178,
+   "false_per_image": 0.13,
+   "proposals_per_image": 3.02,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "32/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "36/36",
+    "T07": "31/32",
+    "T08": "22/22"
+   }
+  },
+  "w1920|conf0.5": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 165,
+   "found_iou50": 165,
+   "false_per_image": 0.1,
+   "proposals_per_image": 2.76,
+   "per_target": {
+    "T01": "18/21",
+    "T02": "31/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "32/36",
+    "T07": "27/32",
+    "T08": "19/22"
+   }
+  },
+  "w960|conf0.05": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 180,
+   "found_iou50": 177,
+   "false_per_image": 0.18,
+   "proposals_per_image": 3.08,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "32/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "36/36",
+    "T07": "32/32",
+    "T08": "22/22"
+   }
+  },
+  "w960|conf0.25": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 179,
+   "found_iou50": 176,
+   "false_per_image": 0.1,
+   "proposals_per_image": 2.98,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "32/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "36/36",
+    "T07": "31/32",
+    "T08": "22/22"
+   }
+  },
+  "w960|conf0.5": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 169,
+   "found_iou50": 166,
+   "false_per_image": 0.02,
+   "proposals_per_image": 2.74,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "31/32",
+    "T04": "17/17",
+    "T05": "20/21",
+    "T06": "33/36",
+    "T07": "27/32",
+    "T08": "21/22"
+   }
+  },
+  "w480|conf0.05": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 180,
+   "found_iou50": 179,
+   "false_per_image": 0.15,
+   "proposals_per_image": 3.05,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "32/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "36/36",
+    "T07": "32/32",
+    "T08": "22/22"
+   }
+  },
+  "w480|conf0.25": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 176,
+   "found_iou50": 175,
+   "false_per_image": 0.06,
+   "proposals_per_image": 2.9,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "31/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "34/36",
+    "T07": "32/32",
+    "T08": "21/22"
+   }
+  },
+  "w480|conf0.5": {
+   "images": 62,
+   "gt": 181,
+   "found_centre": 171,
+   "found_iou50": 170,
+   "false_per_image": 0.02,
+   "proposals_per_image": 2.77,
+   "per_target": {
+    "T01": "20/21",
+    "T02": "30/32",
+    "T04": "17/17",
+    "T05": "21/21",
+    "T06": "33/36",
+    "T07": "30/32",
+    "T08": "20/22"
+   }
+  }
+ }
+}

@@ -1,12 +1,15 @@
 """SlideScan Phase 2: grade a method's candidates against the board, per run and across runs.
 
-  python score.py runs/* [--method grazing] [--gate] [--radius 10]
+  python score.py runs/* [--method grazing] [--gate] [--radius 10] [--min-est 5.5]
       -> methods/<name>/results.json in each run that has methods/<name>/candidates.json,
          then a condition-by-height table of k/n counts (hits / covered target-repeats), never bare percentages
 
 candidates.json (every method writes it, board mm):
   {"candidates": [{"x_mm", "y_mm", "score", "est_height_mm" (or null), "image"}],
    "covered_targets": [target ids the method looked at], "covered_area_cm2": board area it looked at}
+--min-est MM drops candidates whose est_height_mm is below MM before scoring (a candidate with no height estimate is
+kept), so the walkaround's detection cut can be tried without re-running it. The cut is a decision about the method,
+not a measurement: pick it on some runs, then score other runs with it. results.json records it.
 A candidate within --radius mm of a target hits it; each target is hit at most once (repeats from other images
 are duplicates, not alarms). Near a decoy (id D..) = decoy alarm; near nothing = background alarm.
 Outcome per target: hit, miss (covered, no hit) or not covered. Qualifying = measured_mm >= 3.2.
@@ -33,13 +36,15 @@ def per_100cm2(n, area):
     return round(100 * n / area, 3) if area else None
 
 
-def score(run, method, radius=RADIUS_MM):
+def score(run, method, radius=RADIUS_MM, min_est=None):
     """Grade one run's methods/<method>/candidates.json; writes and returns results.json."""
     run = Path(run)
     board = json.loads((run / "targets.json").read_text())["targets"]
     c = json.loads((run / "methods" / method / "candidates.json").read_text())
     hits, decoy, bg = {}, Counter(), 0
     for k in c["candidates"]:
+        if min_est is not None and k.get("est_height_mm") is not None and k["est_height_mm"] < min_est:
+            continue
         t = min(board, key=lambda t: math.dist((t["x_mm"], t["y_mm"]), (k["x_mm"], k["y_mm"])))
         d = math.dist((t["x_mm"], t["y_mm"]), (k["x_mm"], k["y_mm"]))
         if d > radius:
@@ -56,7 +61,7 @@ def score(run, method, radius=RADIUS_MM):
         outcome = "hit" if t["id"] in hits else "miss" if t["id"] in covered else "not covered"
         targets[t["id"]] = {"height_mm": t["measured_mm"], "qualifying": t["measured_mm"] >= QUAL_MM,
                             "outcome": outcome, **hits.get(t["id"], {})}
-    res = {"method": method, "radius_mm": radius, "targets": targets,
+    res = {"method": method, "radius_mm": radius, "min_est_mm": min_est, "targets": targets,
            "decoy_alarms": dict(decoy), "background_alarms": bg, "covered_area_cm2": area,
            "decoy_alarms_per_100cm2": per_100cm2(sum(decoy.values()), area),
            "background_alarms_per_100cm2": per_100cm2(bg, area)}
@@ -99,15 +104,16 @@ def gate(cells):
     return sum(v[0] for v in q), sum(v[1] for v in q), sum(v[2] for v in q)
 
 
-def report(runs, method, radius=RADIUS_MM, show_gate=False):
+def report(runs, method, radius=RADIUS_MM, show_gate=False, min_est=None):
     groups = defaultdict(list)  # condition -> results of its repeats
     for run in runs:
         if (run / "methods" / method / "candidates.json").exists():
             meta = json.loads((run / "meta.json").read_text())
             key = tuple(sorted((k, str(v)) for k, v in meta.items() if k not in NOT_CONDITION))
-            groups[key].append(score(run, method, radius))
+            groups[key].append(score(run, method, radius, min_est))
     n_runs = sum(map(len, groups.values()))
-    print(f"\n== method {method}: {n_runs} runs scored, {len(runs) - n_runs} without methods/{method}/candidates.json")
+    cut = f", candidates below {min_est:g} mm estimated height dropped" if min_est is not None else ""
+    print(f"\n== method {method}: {n_runs} runs scored, {len(runs) - n_runs} without methods/{method}/candidates.json{cut}")
     if not groups:
         return groups
     conds = [dict(k) for k in groups]
@@ -153,6 +159,7 @@ def main():
     p.add_argument("--method", help="methods/<name> to score; default: every method found")
     p.add_argument("--gate", action="store_true", help="also print the Gate A check")
     p.add_argument("--radius", type=float, default=RADIUS_MM, help="match radius in mm")
+    p.add_argument("--min-est", type=float, help="drop candidates whose estimated height is below this, mm")
     args = p.parse_args()
     runs = [Path(r) for a in args.runs for r in (sorted(glob.glob(a)) or [a]) if Path(r).is_dir()]
     methods = [args.method] if args.method else sorted({m.parent.name for r in runs
@@ -160,7 +167,7 @@ def main():
     if not methods:
         raise SystemExit("no methods/<name>/candidates.json in any run")
     for m in methods:
-        report(runs, m, args.radius, args.gate)
+        report(runs, m, args.radius, args.gate, args.min_est)
 
 
 if __name__ == "__main__":

@@ -99,8 +99,8 @@ def frame_no(name):
     return int(Path(name).stem.rsplit("_", 1)[1])
 
 
-def load_geometry(run):
-    import pycolmap
+def load_geometry(run, points=True):
+    """Poses in board mm (tag fit, as walkaround.py) and, if `points`, the COLMAP sparse points (needs pycolmap)."""
     out = run / "methods" / "walkaround"
     sfm = json.loads((out / "sfm.json").read_text())
     markers, msize = wk.load_markers(wk.load_json(wk.find_board(str(run))), None)
@@ -130,16 +130,20 @@ def load_geometry(run):
         pose_b[n] = (Rb, s * tc - Rb @ T)
     centers = np.array([-pose_b[n][0].T @ pose_b[n][1] for n in names])
     axes = np.array([pose_b[n][0][2] for n in names])
-    sparse = out / "colmap" / "sparse"
-    recs = [pycolmap.Reconstruction(str(d)) for d in sorted(sparse.iterdir()) if d.is_dir()]
-    rec = max(recs, key=lambda r: r.num_reg_images())
-    id2f = {iid: frame_no(im.name) for iid, im in rec.images.items()}
-    X, C, F = [], [], []
-    for p in rec.points3D.values():
-        X.append(p.xyz)
-        C.append(np.asarray(p.color)[::-1])
-        F.append(min(id2f[e.image_id] for e in p.track.elements))
-    X = s * (np.array(X) @ R.T) + T
+    if points:
+        import pycolmap
+        sparse = out / "colmap" / "sparse"
+        recs = [pycolmap.Reconstruction(str(d)) for d in sorted(sparse.iterdir()) if d.is_dir()]
+        rec = max(recs, key=lambda r: r.num_reg_images())
+        id2f = {iid: frame_no(im.name) for iid, im in rec.images.items()}
+        X, C, F = [], [], []
+        for p in rec.points3D.values():
+            X.append(p.xyz)
+            C.append(np.asarray(p.color)[::-1])
+            F.append(min(id2f[e.image_id] for e in p.track.elements))
+        X = s * (np.array(X) @ R.T) + T
+    else:
+        X, C, F = np.zeros((0, 3)), np.zeros((0, 3)), []
     box = (X[:, 0] > -80) & (X[:, 0] < 420) & (X[:, 1] > -80) & (X[:, 1] < 450) & (X[:, 2] > -60) & (X[:, 2] < 400)
     order = np.argsort(np.array(F)[box], kind="stable")
     brd = json.loads((run / "targets.json").read_text()).get("board_size_mm") or [333.4, 349.3]
