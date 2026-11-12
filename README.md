@@ -5,6 +5,60 @@ Everything later (signal tests, detectors) reads the run folders this produces, 
 
 **Done when:** one practice run is captured, `check` passes on it, and someone new can read the run folder and know what was captured.
 
+## Quick start: height map from one phone video (walk-around method)
+This is the method that has worked so far: film one slow walk-around of the board, COLMAP gets the camera poses, the printed markers fix the scale, and a plane sweep reads the height of every spot on the board. Details and limits: `WALKAROUND_README.md`.
+
+**What it has shown:** four runs on one matte board with seven bolts (0, 1, 3, 3.2, 4, 5, 10 mm). Every bolt of 3.2 mm or taller was found every time, and heights read about 3.4 mm too high by a steady offset. **What it has not shown:** decoys, glossy or curved surfaces, a different board, a real slide. Those four runs are the same four required bolts on one board, so this is not a measured miss rate.
+
+**You need**
+- The marker board: print `markers_0-15.pdf` and `markers_16-31.pdf` at 100% scale, glue the markers at the positions in `board.json`, and caliper every bolt (3 readings each, see "Physical build" below). The markers are what give the scale.
+- Texture on the board (matte tape scraps or paint speckle). A plain board gives COLMAP nothing to match. `check` refuses `texture_help: none`.
+- An iPhone video: main lens (1x), 4K 30 fps, 15-30 s, 20-30 cm above the board, one slow orbit with at least 30 cm of sideways travel, exposure and focus locked, soft light, no glare, no zoom changes.
+- A Windows PC with WSL Ubuntu (it was run this way only). Native Windows and Mac are untested. pycolmap has no Linux ARM build, so an ARM Linux server cannot `pip install` it.
+
+**Install once**
+```
+# Windows
+pip install opencv-python pillow pillow-heif
+# WSL Ubuntu (Python 3.12; ffmpeg is optional, for the replay video)
+python3 -m venv ~/vslam/.venv
+~/vslam/.venv/bin/pip install pycolmap opencv-python numpy scipy pillow
+```
+COLMAP on 4K frames crashed WSL until `C:\Users\<you>\.wslconfig` had `[wsl2]`, `memory=20GB`, `swap=16GB` (run `wsl --shutdown` after editing). Use 16 GB or more of RAM on the PC.
+
+**Run** (the run folder is `runs/<date>_<label>`)
+```
+# Windows, in this folder
+python slidescan.py new <label>                    # makes the run folder
+#   copy the video into runs/<run>/raw/ ; fill in meta.json (method "walkaround", texture_help "speckle" or "tape",
+#   every field except notes) ; put your caliper readings in the run's targets.json
+python slidescan.py frames runs/<run> --every 3    # about 10 frames per second, finds the markers
+python slidescan.py check runs/<run>               # lists what is missing; "OK" when complete
+
+# WSL: work on a copy on WSL's own disk (the Windows disk is slow and was unstable)
+R=/mnt/c/Users/<you>/Desktop/SlideScan/runs/<run>   # edit the path
+W=$HOME/w_run; rm -rf $W; mkdir -p $W
+cp -r $R/frames $W/frames; cp $R/meta.json $R/targets.json $R/detections.json $W/
+cd /mnt/c/Users/<you>/Desktop/SlideScan
+~/vslam/.venv/bin/python methods/walkaround_sfm.py $W --every 3 --max-image-size 2400 --focal-35mm 26 --threads 4   # about 2 min
+~/vslam/.venv/bin/python methods/walkaround.py $W                                                                  # about 8 min
+mkdir -p $R/methods; cp -r $W/methods/walkaround $R/methods/
+~/vslam/.venv/bin/python replay.py $R              # optional: reconstruction_replay.mp4, about 3 min
+
+# Windows
+python score.py runs/<run> --method walkaround --gate                  # needs bolts at known positions
+python score.py runs/<run> --method walkaround --gate --min-est 5.5    # same, dropping bumps that read under 5.5 mm
+```
+`--focal-35mm 26` is the iPhone main camera; leave it off for another lens. Frames are 4K, so `--max-image-size 2400` and `--threads 4` keep COLMAP inside memory.
+
+**Read the result** in `runs/<run>/methods/walkaround/`: `heights.json` (each known bolt: estimate against caliper), `heightmap.png`, `candidates.json` (every bump found), `scale.json` (how well the markers fit; about 1-2 mm rms is normal). `replay.py` adds `reconstruction_replay.mp4` and `panel_topdown_map.png` to the run folder.
+- Heights are relative to the local board and read high by a steady offset of about 3.4 mm. A flush bolt reads about 3 mm. Judge a bump against that, not against zero.
+- The 5.5 mm cut (`--min-est 5.5`) was picked on two runs and held on two others. It leaves the flush and 1 mm bolts unflagged in three of the four runs.
+- The first run had 11 false alarms at that cut, the other three 0 or 1. A 3.0 mm bolt reads 5.6-9.0 mm and cannot be told from a 3.2 mm one.
+- If the run stops, the message tells you why: see the table in `WALKAROUND_README.md`.
+
+**Self-tests** (no camera needed, each prints `ok`): `python test_slidescan.py`, `python test_score.py`, and in WSL `python test_walkaround.py --quick` (about 2 min), `python test_replay.py`.
+
 ## Physical build (not code)
 1. **Board.** 1220 x 610 mm (2 x 4 ft) flat matte board. Every target and marker has a `planned_xy_mm` in `board.json` (the layout from the Phase 1 plan). Markers 0 and 1 are planned 1000 mm apart; their measured positions are the scale reference. Curved glossy panel comes later.
 2. **Targets.** Mount the targets listed in `board.json` (bolts at 0, 1, 2, 3, 3.2, 4, 5, 10 mm; two-thread bolt; flared head; lifted seam; covered screw; hex head T13, proposed; three decoys). Add duplicates as `T14`, `T15`… if you want more trials per height. Take **three caliper readings** of each height, perpendicular to the surrounding surface, into `readings_mm`, and write their median as `measured_mm`. `check` refuses a run otherwise. Nominal is not enough.

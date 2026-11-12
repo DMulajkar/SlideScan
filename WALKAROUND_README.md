@@ -4,7 +4,10 @@ Film a slow walk-around of the board. COLMAP gets the camera poses from the vide
 The printed tag, visible in a few frames, fixes the metric scale and the board plane once.
 A plane sweep then reads each bolt's height against the local board.
 
-Written 2026-10-28 and tested **only on a synthetic board** (see "What was and was not tested").
+Written 2026-10-28 on a synthetic board, then run on four real videos of one matte board (2026-10-29 to 2026-11-11).
+**Start with the "Quick start" in `README.md`**, which has the install and the full command sequence that worked; this file
+holds the details, the error table and the limits. The "What was and was not tested" section below is the original
+synthetic-only note and is out of date: real runs have happened, but only on that one board.
 
 ## New files (nothing existing is changed)
 ```
@@ -22,7 +25,9 @@ In the WSL venv (`~/vslam/.venv`, Python 3.12):
 pip install pycolmap opencv-python numpy scipy
 ```
 Run **both** steps in WSL; the run folder is at `/mnt/c/Users/mmtes/Desktop/SlideScan/runs/<run>`.
-If it crawls, copy the run into WSL's own disk first. pycolmap's wheels are CPU-only; that is fine, only sparse SfM runs.
+Copy the run's frames into WSL's own disk first: running on `/mnt/c` was slow and COLMAP crashed WSL until `.wslconfig` had
+`memory=20GB`, `swap=16GB`, and the run used `--max-image-size 2400 --threads 4`. pycolmap's wheels are CPU-only; that is fine, only sparse SfM runs.
+pycolmap has no Linux ARM wheel, so this does not install on an ARM server (such as Oracle's free A1 box) without building it from source.
 Check first: `python test_walkaround.py --quick` (about 2 min) then `python test_walkaround.py` (about 10 min).
 
 ## Before you film
@@ -43,10 +48,11 @@ python slidescan.py new ...                       (existing; make the run, then 
 python slidescan.py frames runs/<run> --every 3   (existing; about 10 frames per second)
 python slidescan.py check runs/<run>              (existing; every meta field filled, "n/a" for the light fields;
                                                    texture_help must not be "none" for this method)
-python methods/walkaround_sfm.py runs/<run> --focal-35mm 26
+python methods/walkaround_sfm.py runs/<run> --focal-35mm 26 --max-image-size 2400 --threads 4
 python methods/walkaround.py runs/<run>
-python score.py runs/<run> --method walkaround --gate
+python score.py runs/<run> --method walkaround --gate [--min-est 5.5]
 ```
+(In practice the two `methods/` commands ran on a WSL-local copy of the run; the exact commands are in the `README.md` Quick start.)
 - `--focal-35mm 26` tells COLMAP the iPhone main camera's 35 mm-equivalent focal length. A flat board is a hard case for
   SfM without a focal-length guess. Leave it off for another lens.
 - Frames are read from `frames/`, `raw/frames/`, then `raw/`. Use `--images DIR` if `slidescan.py frames` puts them elsewhere.
@@ -101,3 +107,12 @@ The first real run will be harder than the synthetic one; treat its number, not 
 - A bolt that occludes its neighbour in oblique views can bias the board reference next to it; the score uses the best 70% of views to blunt this.
 - Blind mode only scores cells seen by at least 6 of the used frames, and leaves out the marker squares (plus 3 mm) so markers cannot become detections.
 - Everything depends on the SfM poses. If `mean_reprojection_error_px` in `sfm.json` is above about 1 px, look at the frames before trusting the heights.
+
+## Replay video (added 2026-11-11)
+`python replay.py runs/<run>` (WSL, needs the run's `methods/walkaround/` including `colmap/`) writes `reconstruction_replay.mp4` and
+`panel_topdown_map.png` into the run folder: the recording beside the COLMAP points appearing and the camera path, then the plane-sweep
+height map as a turbo mesh labelled `caliper->scan` (mm), then a top-down colour map with rings on the candidates and a turning 3D colour
+point map. `--hold` seconds of height surface (default 8, 0 skips it), `--tail` seconds of ending (10), `--every N` for a quick preview.
+The relief is indicative, not measured; the last frames print the run's own height error. `python test_replay.py` is the self-test.
+Other flags worth knowing: `walkaround_sfm.py --threads N` (4 on 4K frames), `walkaround.py --h-min/--h-max` (default -3..16 mm),
+`score.py --min-est MM`. Commands and gotchas are in the wiki pages "SlideScan - Command Reference" and "COLMAP Crashes WSL on 4K Frames ...".
