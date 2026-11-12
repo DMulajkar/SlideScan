@@ -462,7 +462,7 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
         patch_mm=3.0, patch_n=5, frac=0.7, min_score=0.4, min_views=4, cov_views=6,
         min_height=2.0, ref_win_mm=40.0, search_r=7.0, bg_r=9.0, marker_mm=None, marker_margin=3.0,
         dict_name="DICT_4X4_50", max_tag_images=None, max_tag_rms=3.0, min_tag_angle=1.5,
-        region=None, margin_mm=25.0, flat_std=1.0, verbose=True, views_override=None):
+        region=None, margin_mm=25.0, flat_std=1.0, verbose=True, views_override=None, view_range=None):
     say = print if verbose else (lambda *a, **k: None)
     if ndi is None:
         raise SystemExit("scipy is required (pip install scipy)")
@@ -538,10 +538,13 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
     if views_override is not None:
         views = views_override
     else:
-        pick = np.unique(np.linspace(0, len(names) - 1, min(max_views, len(names))).round().astype(int))
+        # view_range (lo, hi) in 0..1: take the views only from that part of the video, to ask how much footage
+        # is needed. The tag fit above still uses every frame, so it does not test whether the tag is visible there.
+        pool = names if view_range is None else names[round(view_range[0] * len(names)):round(view_range[1] * len(names))]
+        pick = np.unique(np.linspace(0, len(pool) - 1, min(max_views, len(pool))).round().astype(int))
         views = []
         for i in pick:
-            n = names[i]
+            n = pool[i]
             g, sc = read_gray(os.path.join(img_dir, n), max_width)
             Rc, tc = poses_sfm[n]
             Rb = Rc @ R.T
@@ -656,11 +659,13 @@ def main(argv=None):
     ap.add_argument("--h-max", type=float, default=16.0,
                     help="highest height swept, mm. Heights read high, so a 10 mm bolt can come out near 14: "
                          "keep this well above the tallest target (run B2 missed its 10 mm bolt at 12)")
+    ap.add_argument("--view-range", type=float, nargs=2, metavar=("LO", "HI"),
+                    help="take the sweep's views only from this part of the video, as fractions 0 to 1 (e.g. 0 0.33)")
     a = ap.parse_args(argv)
     run(a.run, board=a.board, mode=a.mode, max_views=a.max_views, max_width=a.max_width,
         min_score=a.min_score, min_height=a.min_height, grid_mm=a.grid_mm, patch_mm=a.patch_mm,
         max_tag_images=a.max_tag_images, marker_mm=a.marker_mm, dict_name=a.dict_name, region=a.region,
-        h_min=a.h_min, h_max=a.h_max)
+        h_min=a.h_min, h_max=a.h_max, view_range=a.view_range)
 
 
 if __name__ == "__main__":

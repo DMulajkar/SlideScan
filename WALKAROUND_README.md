@@ -115,4 +115,6 @@ height map as a turbo mesh labelled `caliper->scan` (mm), then a top-down colour
 point map. `--hold` seconds of height surface (default 8, 0 skips it), `--tail` seconds of ending (10), `--every N` for a quick preview.
 The relief is indicative, not measured; the last frames print the run's own height error. `python test_replay.py` is the self-test.
 Other flags worth knowing: `walkaround_sfm.py --threads N` (4 on 4K frames), `walkaround.py --h-min/--h-max` (default -3..16 mm),
+`walkaround.py --max-views N` (frames in the height sweep, default 30; 10 and 15 failed on tex1 and tex2, 60 and 100 added nothing) and
+`--view-range LO HI` (take those views from only that fraction of the video, to test how little footage is enough),
 `score.py --min-est MM`. Commands and gotchas are in the wiki pages "SlideScan - Command Reference" and "COLMAP Crashes WSL on 4K Frames ...".
