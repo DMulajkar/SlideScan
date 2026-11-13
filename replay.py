@@ -8,6 +8,8 @@ first sees them, with the board, markers, bolts and the path. Last --tail second
 projected onto the board plane, median of overhead views) and a slowly turning 3D colour point map whose height comes
 from methods/walkaround/heightmap.npz (smoothed, x4). An illustration, not a measurement: the last frames print the
 run's mean absolute height error from heights.json. --every N keeps every Nth frame (quick preview).
+--red-mm 5.5 paints red the bumps whose estimated height reaches 5.5 mm (the cut score.py --min-est uses), on the
+3D colour map (the whole bump as drawn) and on the rings.
 Also writes panel_topdown_map.png next to the video. If ffmpeg is on PATH the video is re-encoded to H.264.
 """
 import argparse
@@ -30,6 +32,7 @@ import walkaround as wk  # reuse: tag detection, similarity fit, camera model, b
 VIDEO_FPS = 30.0
 SIZE, LW = (1280, 720), 480                      # canvas, width of the left panel
 BG, TXT, MUTED, ACC, PATH, BOARD = (20, 17, 14), (232, 228, 222), (150, 146, 140), (70, 190, 255), (60, 140, 255), (72, 112, 150)
+RED = (40, 40, 235)
 
 
 # ------------------------------------------------------------------ geometry helpers
@@ -164,6 +167,17 @@ def smooth_height(run, XY, sigma=1.3, lo=-3.0, hi=12.0):
     return cv2.remap(rel, mx.reshape(1, -1), my.reshape(1, -1), cv2.INTER_LINEAR, borderValue=0).ravel()
 
 
+def red_mask(XY, H, cands, cut, floor=1.0, radius=10.0):
+    """Board points XY (drawn heights H, mm) to paint red: the bump as drawn (H at least floor) within radius mm of a
+    candidate whose estimate reaches the cut. The score decides per bump, so the red does too. Smoothing halves a
+    bolt's peak (tex1: estimates 6-14 mm draw as 2.8-6.7 mm), so the floor is 1 mm, not the 2 mm bump threshold."""
+    flagged = np.array([[k["x_mm"], k["y_mm"]] for k in cands if (k.get("est_height_mm") or 0) >= cut]).reshape(-1, 2)
+    if not len(flagged):
+        return np.zeros(len(XY), bool)
+    near = (np.linalg.norm(XY[:, None, :] - flagged[None], axis=2) <= radius).any(1)
+    return near & (H >= floor)
+
+
 # ------------------------------------------------------------------ drawing
 def put(img, text, org, scale=0.5, color=TXT, thick=1):
     cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
@@ -252,7 +266,7 @@ def surface_stage(vw, run, g, hs, left, hold_s, fps, ex_max=4.0):
 
 
 # ------------------------------------------------------------------ render
-def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0):
+def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0, red_mm=None):
     t0 = time.time()
     g = load_geometry(run)
     print(f"loaded: {g['n_cams']} cameras, {len(g['pts'])} points ({time.time() - t0:.0f} s)")
@@ -319,12 +333,19 @@ def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0):
     gv, gu = np.mgrid[0:cmap.shape[0]:step, 0:cmap.shape[1]:step]
     keep = cov[gv, gu]
     gx_mm, gy_mm = gu / ppm, (cmap.shape[0] - 1 - gv) / ppm
-    zg = 4.0 * smooth_height(run, np.column_stack([gx_mm.ravel(), gy_mm.ravel()])).reshape(gv.shape)
+    hg = smooth_height(run, np.column_stack([gx_mm.ravel(), gy_mm.ravel()])).reshape(gv.shape)
+    zg = 4.0 * hg
     dzdy, dzdx = np.gradient(zg, -2.0, 2.0)                                  # rows run toward -y, spacing 2 mm
     lx, ly, lz = 0.5, 0.5, 0.7                                               # light from the upper left, fairly high
     shade = ((-dzdx * lx - dzdy * ly + lz) / np.sqrt(1 + dzdx ** 2 + dzdy ** 2) / lz).clip(0.5, 1.6)
     P = np.column_stack([gx_mm[keep], gy_mm[keep], zg[keep]])
-    col = np.clip(cmap[gv[keep], gu[keep]] * shade[keep][:, None], 0, 255).astype(np.uint8)
+    cands = json.loads((g["out"] / "candidates.json").read_text())["candidates"]
+    base = cmap[gv[keep], gu[keep]].astype(float)
+    if red_mm is not None:
+        red = red_mask(P[:, :2], hg[keep], cands, red_mm)
+        base[red] = RED
+        print(f"red: {red.sum():,} points on bumps estimated at {red_mm:g} mm or more")
+    col = np.clip(base * shade[keep][:, None], 0, 255).astype(np.uint8)
     box3 =np.array([[x, y, z] for x in (0, bw) for y in (0, bh) for z in (0, 50)], float)
     rect3 = (LW, 70, SIZE[0] - LW, SIZE[1] - 130)
     pr3 = Proj(view_matrix(-35, 34), box3, rect3)
@@ -332,11 +353,11 @@ def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0):
     mh, mw = cmap.shape[:2]
     sc2 = min((LW - 30) / mw, (SIZE[1] - 190) / mh)
     thumb = cv2.resize(cmap, (int(mw * sc2), int(mh * sc2)), interpolation=cv2.INTER_AREA)
-    cands = json.loads((g["out"] / "candidates.json").read_text())["candidates"]
     for k in cands:                                   # rings on the photo where the sweep flags a bump, with its height
         ux, vy = int(k["x_mm"] * ppm * sc2), int((mh - 1 - k["y_mm"] * ppm) * sc2)
-        cv2.circle(thumb, (ux, vy), 11, ACC, 1, cv2.LINE_AA)
-        put(thumb, f"{k['est_height_mm']:.1f}", (ux + 13, vy + 4), 0.42, ACC)
+        rc = RED if red_mm is not None and (k.get("est_height_mm") or 0) >= red_mm else ACC
+        cv2.circle(thumb, (ux, vy), 11, rc, 1, cv2.LINE_AA)
+        put(thumb, f"{k['est_height_mm']:.1f}", (ux + 13, vy + 4), 0.42, rc)
     n_tail = int(tail_s * fps)
     for i in range(n_tail):
         az = -35 + 60 * min(1.0, i / max(1, n_tail - 12))
@@ -352,6 +373,8 @@ def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0):
         put(c, "100 mm", (15 + bar + 8, 120 + thumb.shape[0] + 17), 0.45, ACC)
         put(c, "rings: places the sweep flags as a bump (2 mm or more),", (14, 120 + thumb.shape[0] + 42), 0.38, ACC)
         put(c, "label = its estimated height above the local board, mm", (14, 120 + thumb.shape[0] + 60), 0.38, ACC)
+        if red_mm is not None:
+            put(c, f"red: estimated {red_mm:g} mm or more, the cut the score uses", (14, 120 + thumb.shape[0] + 78), 0.38, RED)
         put(c, "TOP-DOWN COLOUR MAP", (14, 38), 0.65)
         put(c, f"recording frames projected onto the board plane (median of {nv} overhead views)", (14, 70), 0.36, MUTED)
         put(c, "PANEL COLOUR POINT MAP (3D)", (LW + 16, 38), 0.65)
@@ -363,7 +386,7 @@ def render(run, out, tail_s=10.0, every=1, fps=10, ppm=2, hold_s=8.0):
     vw.release()
     if shutil.which("ffmpeg"):
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", vw_path, "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                        "-crf", "20", str(out)], check=True)
+                        "-crf", "20", "-movflags", "+faststart", str(out)], check=True)
         os.remove(vw_path)
     else:
         os.replace(vw_path, out)
@@ -377,9 +400,13 @@ def main():
     ap.add_argument("--tail", type=float, default=10.0, help="seconds of colour-map ending")
     ap.add_argument("--every", type=int, default=1, help="keep every Nth extracted frame (preview)")
     ap.add_argument("--hold", type=float, default=8.0, help="seconds of raw height-surface view (0 = skip)")
+    ap.add_argument("--red-mm", type=float, help="paint bumps estimated at this height or more red (score's --min-est)")
+    ap.add_argument("--src-fps", type=float, default=30.0, help="frame rate the frame numbers count in (for the clock)")
     a = ap.parse_args()
+    global VIDEO_FPS
+    VIDEO_FPS = a.src_fps
     run = Path(a.run)
-    render(run, Path(a.out) if a.out else run / "reconstruction_replay.mp4", a.tail, a.every, hold_s=a.hold)
+    render(run, Path(a.out) if a.out else run / "reconstruction_replay.mp4", a.tail, a.every, hold_s=a.hold, red_mm=a.red_mm)
 
 
 if __name__ == "__main__":

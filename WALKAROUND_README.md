@@ -114,6 +114,10 @@ The first real run will be harder than the synthetic one; treat its number, not 
 height map as a turbo mesh labelled `caliper->scan` (mm), then a top-down colour map with rings on the candidates and a turning 3D colour
 point map. `--hold` seconds of height surface (default 8, 0 skips it), `--tail` seconds of ending (10), `--every N` for a quick preview.
 The relief is indicative, not measured; the last frames print the run's own height error. `python test_replay.py` is the self-test.
+Added 2026-11-13: `--red-mm 5.5` paints red, on the 3D colour map and its rings, the bumps whose estimated height reaches 5.5 mm (the
+score's `--min-est` cut). The whole bump as drawn turns red: smoothed height 1 mm or more within 10 mm of such a candidate. `--src-fps` sets the clock when the frame numbers
+count a resampled video (the web job's HDR path: 10). ffmpeg must be on PATH for H.264; without it the file is MPEG-4 Part 2, which
+browsers do not play (tex1's 2026-11-11 replay is one).
 Other flags worth knowing: `walkaround_sfm.py --threads N` (4 on 4K frames), `walkaround.py --h-min/--h-max` (default -3..16 mm),
 `walkaround.py --max-views N` (frames in the height sweep, default 30; 10 and 15 failed on tex1 and tex2, 60 and 100 added nothing) and
 `--view-range LO HI` (take those views from only that fraction of the video, to test how little footage is enough),

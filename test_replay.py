@@ -72,4 +72,13 @@ with tempfile.TemporaryDirectory() as tmp:
     warm = (right[..., 2] > 150) & (right[..., 0] < 90)           # BGR: strong red, little blue
     assert warm.sum() > 20, "the 9 mm bump should show as a red peak"
     assert (right[..., 0] > right[..., 2]).sum() > 500, "the flat floor should be cool (blue)"
+
+
+# 5. red_mask: the drawn bump (1 mm or more) round a candidate that passed the cut, nothing else
+cands = [{"x_mm": 50.0, "y_mm": 40.0, "est_height_mm": 9.0}, {"x_mm": 20.0, "y_mm": 60.0, "est_height_mm": 4.0},
+         {"x_mm": 90.0, "y_mm": 12.0, "est_height_mm": None}]
+XY = np.array([[50, 40], [56, 44], [58, 40], [50, 51], [20, 60], [90, 10]], float)
+H = np.array([4.0, 1.2, 0.5, 3.0, 6.0, 7.0])  # peak, flank, flat, high but 11 mm off, unflagged bump, no estimate
+assert rp.red_mask(XY, H, cands, 5.5).tolist() == [True, True, False, False, False, False]
+assert not rp.red_mask(XY, H, cands, 10.0).any(), "nothing reaches a 10 mm cut"
 print("ok")
