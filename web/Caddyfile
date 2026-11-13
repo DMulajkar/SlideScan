@@ -1,0 +1,4 @@
+# /etc/caddy/Caddyfile on the VM: HTTPS (automatic certificate) in front of web/server.py. Needs inbound TCP 443.
+slidescan-api.northcentralus.cloudapp.azure.com {
+	reverse_proxy 127.0.0.1:8080
+}

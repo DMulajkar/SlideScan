@@ -1,0 +1,15 @@
+# systemd unit for web/server.py on the VM:  sudo cp web/slidescan.service /etc/systemd/system/ && sudo systemctl enable --now slidescan
+[Unit]
+Description=SlideScan web jobs
+After=network-online.target
+
+[Service]
+User=azureuser
+WorkingDirectory=/home/azureuser/SlideScan
+# SLIDESCAN_TOKEN=<access code>, mode 600
+EnvironmentFile=/home/azureuser/slidescan.env
+ExecStart=/home/azureuser/vslam/.venv/bin/python web/server.py --origins https://dhruvmulajkar.me,https://www.dhruvmulajkar.me,http://localhost:8765
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
