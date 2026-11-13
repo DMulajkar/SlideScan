@@ -87,6 +87,8 @@ def main():
             jid = json.loads(body)["id"]
             s = wait(base, jid)
             assert s["state"] == "done" and s["step"] == "Done" and s["files"] == ["heightmap.png"], s
+            assert [n for n, _ in s["steps"]] == ["Pretending to work", "Done"], s["steps"]
+            assert s["started"] <= s["steps"][0][1] + 0.1 <= s["steps"][1][1] + 0.1 <= s["ended"] + 0.2, s
             assert s["name"] == "IMG_1.MOV" and s["size"] == 11
             assert call(base, f"/api/jobs/{jid}/out/heightmap.png")[2] == b"setyb-oediv"
 
@@ -98,6 +100,13 @@ def main():
                 code, h, body = call(base, hm, headers={"Range": rng})
                 assert (code, body, h.get("Content-Range")) == want, (rng, code, body, h.get("Content-Range"))
             assert server.TYPES[".mp4"] == "video/mp4"
+
+            # ?download=1 asks the browser to save the file (the page's buttons); plain links still open it
+            assert "Content-Disposition" not in call(base, hm)[1]
+            code, h, body = call(base, hm + "?download=1")
+            assert code == 200 and body == b"setyb-oediv" and h["Content-Disposition"] == 'attachment; filename="heightmap.png"', h
+            code, h, _ = call(base, hm + "?download=1", headers={"Range": "bytes=0-1"})
+            assert code == 206 and h["Content-Disposition"].startswith("attachment"), h
 
             # a job that fails shows its log
             jid2 = json.loads(call(base, "/api/jobs?name=b.mp4", "POST", b"fail", {"X-Token": TOKEN})[2])["id"]

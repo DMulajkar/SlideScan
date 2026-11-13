@@ -8,9 +8,11 @@ API (JSON except result files):
     GET  /api/health                     {"ok": true, "queued": n}
     GET  /api/check                      header X-Token -> 200, or 401 (the page checks the code before a long upload)
     POST /api/jobs?name=IMG_1.MOV        header X-Token; body = the raw video bytes -> 201 {"id": ...}
-    GET  /api/jobs/<id>                  state (queued|running|done|failed), step, times, result file names
+    GET  /api/jobs/<id>                  state (queued|running|done|failed), step, steps ([name, start time] each),
+                                         times, result file names
     GET  /api/jobs/<id>/out/<file>       one result file (heightmap.png, reconstruction.mp4, ...); honours a
-                                         single Range header, which Safari needs to play the video
+                                         single Range header, which Safari needs to play the video;
+                                         ?download=1 makes the browser save it instead of opening it
 
 Job ids are 128-bit random, so a results link works without the code; only uploads need it.
 Each job runs `bash web/run_job.sh <job dir>`, which prints "STEP ..." lines; the latest is the progress shown.
@@ -76,7 +78,7 @@ def worker(srv, pipeline):
         job = srv.q.get()
         srv.busy = True
         write_state(job, state="running", step="Starting", started=time.time())
-        rc = -1
+        rc, steps = -1, []
         try:
             with open(job / "job.log", "w") as log:
                 p = subprocess.Popen([*pipeline, str(job)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -85,7 +87,8 @@ def worker(srv, pipeline):
                     log.write(line)
                     log.flush()
                     if line.startswith("STEP "):
-                        write_state(job, step=line[5:].strip())
+                        steps.append([line[5:].strip(), round(time.time(), 1)])  # the page times each step
+                        write_state(job, step=steps[-1][0], steps=steps)
                 rc = p.wait()
         except Exception as e:  # keep the worker alive for the next job
             with open(job / "job.log", "a") as log:
@@ -143,11 +146,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_file(self, f):
+    def send_file(self, f, save=False):
         n, ctype = f.stat().st_size, TYPES.get(f.suffix, "application/octet-stream")
+        h = {"Accept-Ranges": "bytes"}
+        if save:  # browsers ignore <a download> across origins; this header makes them save instead of open
+            h["Content-Disposition"] = f'attachment; filename="{f.name}"'
         m = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range", "").strip())
         if not m or m.groups() == ("", ""):  # no range, or several: send it all
-            return self.reply(200, f.read_bytes(), ctype, {"Accept-Ranges": "bytes"})
+            return self.reply(200, f.read_bytes(), ctype, h)
         a, b = m.groups()
         start, end = (int(a), min(int(b), n - 1) if b else n - 1) if a else (max(0, n - int(b)), n - 1)
         if start > end:
@@ -155,7 +161,7 @@ class Handler(BaseHTTPRequestHandler):
         with open(f, "rb") as fh:
             fh.seek(start)
             body = fh.read(end - start + 1)
-        self.reply(206, body, ctype, {"Content-Range": f"bytes {start}-{end}/{n}", "Accept-Ranges": "bytes"})
+        self.reply(206, body, ctype, {**h, "Content-Range": f"bytes {start}-{end}/{n}"})
 
     def token_ok(self):
         ok = hmac.compare_digest(self.headers.get("X-Token", "").encode(), self.server.token.encode())
@@ -190,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(200, s)
                 f = job / "out" / parts[4]
                 if parts[3] == "out" and FILE.match(parts[4]) and f.is_file():
-                    return self.send_file(f)
+                    return self.send_file(f, "download" in parse_qs(urlsplit(self.path).query))
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):
