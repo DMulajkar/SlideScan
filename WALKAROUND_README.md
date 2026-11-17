@@ -122,3 +122,21 @@ Other flags worth knowing: `walkaround_sfm.py --threads N` (4 on 4K frames), `wa
 `walkaround.py --max-views N` (frames in the height sweep, default 30; 10 and 15 failed on tex1 and tex2, 60 and 100 added nothing) and
 `--view-range LO HI` (take those views from only that fraction of the video, to test how little footage is enough),
 `score.py --min-est MM`. Commands and gotchas are in the wiki pages "SlideScan - Command Reference" and "COLMAP Crashes WSL on 4K Frames ...".
+
+## Without markers: scale from one measured length (added 2026-11-17)
+1. Measure the straight distance between two points you can see (two screw heads, two tick marks on a tape measure lying in the
+   scene). Note the pixel position of each point in a few frames from around the orbit (2 at least, 4 better) in a taps file:
+   `{"A": {"frame.jpg": [x, y], ...}, "B": {...}}` (full-size frame pixels).
+2. `python methods/length_scale.py runs/<run> --taps taps.json --mm <length>` writes `methods/walkaround/length_scale.json`
+   (and compares with the marker scale if there is one). `--selftest` is its self-test.
+3. `python methods/walkaround.py runs/<run> --scale-from runs/<run>/methods/walkaround/length_scale.json` measures heights with
+   that scale and with the board plane fitted to COLMAP's own points (`colmap/sparse/` must be there). No tags are looked for.
+   Outputs go to `methods/walkaround_length/`, so `score.py` grades it as its own method and the marker results stay.
+   With no board layout it is blind only, positions are in a frame with x from point A toward B, and only the area where COLMAP
+   found the surface, 20 mm in from its edge, is searched. `--anchor-ids T04 T08` (test boards only) puts that frame on the
+   board layout so targets mode and `score.py` work like the marker run.
+Tested on tex1 and tex2 only (taps by eye on the T04 and T08 screw heads): scale −0.01 and −0.04% off the marker's; with
+`--anchor-ids`, mean height error +2.96 and +2.98 mm (marker runs +2.88 and +3.23) and every 3.2 mm-and-up bolt flagged at
+the 5.5 mm cut. Without the layout, every such bolt was still flagged, with 3 and 2 false alarms near the board's edges and 2 and 1 on
+the printed markers (which are not blanked when their positions are unknown). `test_walkaround.py` checks the frame and the
+points3D.bin reader. Not tested: a real slide (a curved surface needs local planes, not one), a tape-measured length, a phone tap.

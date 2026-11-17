@@ -207,10 +207,56 @@ def test_end_to_end(root, poses, tex, bolt_tex):
     check_targets(run, res2, "tag used from only 6 frames")
 
 
+def test_length_frame():
+    """No-marker frame: COLMAP's points3D.bin is read back, the plane is found among outliers, the scale and the
+    tapped points land where they should, and --anchor-ids puts the frame on the board layout."""
+    import struct
+    rng = np.random.default_rng(7)
+    s = 47.0                                                     # mm per SfM unit
+    # the board in SfM units: a tilted plane through c with normal nrm, plus 15% off-plane clutter
+    nrm = np.array([0.2, -0.3, 0.93]); nrm /= np.linalg.norm(nrm)
+    u = np.cross(nrm, [1.0, 0, 0]); u /= np.linalg.norm(u); v = np.cross(nrm, u)
+    c = np.array([1.0, 2.0, 3.0])
+    ab = rng.uniform(-4, 4, (3000, 2))
+    on = c + ab[:, :1] * u + ab[:, 1:] * v + rng.normal(0, 0.3 / s, (3000, 1)) * nrm
+    clutter = c + rng.uniform(-4, 4, (500, 3))
+    pts = np.vstack([on, clutter])
+    A = c + 1.0 * u - 2.0 * v + (3.0 / s) * nrm                  # a 3 mm head
+    B = c - 3.0 * u + 2.5 * v + (10.0 / s) * nrm                 # a 10 mm head
+    ls = {"scale_mm_per_unit": s, "A": {"X_units": A.tolist()}, "B": {"X_units": B.tolist()}}
+    cams = c + 5.0 * nrm + rng.normal(0, 1, (20, 3))             # cameras on the +normal side
+    with tempfile.TemporaryDirectory() as d:                    # points3D.bin round trip (COLMAP binary layout)
+        os.makedirs(os.path.join(d, "0"))
+        with open(os.path.join(d, "0", "points3D.bin"), "wb") as f:
+            f.write(struct.pack("<Q", len(pts)))
+            for i, p in enumerate(pts):
+                f.write(struct.pack("<Q3d3Bd", i, *p, 1, 2, 3, 0.5))
+                f.write(struct.pack("<Q", 2) + struct.pack("<II", 1, i) * 2)
+        back = wa.read_points3d(d)
+    assert np.allclose(back, pts), "points3D.bin read back wrong"
+    s2, R, T, plane = wa.frame_from_length(ls, back, cams)
+    assert abs(np.linalg.det(R) - 1) < 1e-9 and s2 == s
+    assert plane["plane_rms_mm"] < 0.6, plane
+    a, b = s * R @ A + T, s * R @ B + T
+    L_in = s * np.linalg.norm((B - A) - ((B - A) @ nrm) * nrm)
+    assert np.allclose(a, [0, 0, 3.0], atol=0.3) and np.allclose(b, [L_in, 0, 10.0], atol=0.3), (a, b)
+    # anchored onto a layout: A at (40, 30), B in the direction of (290, 275)
+    _, R3, T3, _ = wa.frame_from_length(ls, back, cams, anchor_xy=((40.0, 30.0), (290.0, 275.0)))
+    a3, b3 = s * R3 @ A + T3, s * R3 @ B + T3
+    ang = np.degrees(np.arctan2(b3[1] - a3[1], b3[0] - a3[0]) - np.arctan2(245.0, 250.0))
+    assert np.allclose(a3, [40, 30, 3.0], atol=0.3) and abs(ang) < 0.05, (a3, b3, ang)
+    # cameras on the other side flip the normal, so heights still come out positive toward the cameras
+    _, R4, T4, _ = wa.frame_from_length(ls, back, c - 5.0 * nrm + rng.normal(0, 1, (20, 3)))
+    assert (s * R4 @ A + T4)[2] < -2.5
+    print("ok length frame: points3D.bin round trip, plane rms", round(plane["plane_rms_mm"], 2), "mm with 15% clutter, "
+          "A at", np.round(a, 2), "B at", np.round(b, 2), "anchored A at", np.round(a3, 2))
+
+
 def main():
     quick = "--quick" in sys.argv
     test_geometry_helpers()
     test_parsers()
+    test_length_frame()
     tex, bolt_tex = build_scene()
     poses = camera_ring()
     test_engine_known_poses(poses, tex, bolt_tex)

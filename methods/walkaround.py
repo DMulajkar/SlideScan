@@ -25,11 +25,19 @@ Conventions (from the Phase 1 plan): board millimetres, +z toward the camera, ma
 square to the board with their top edge toward +y, so a marker's corners are
 TL(cx-s/2, cy+s/2), TR(cx+s/2, cy+s/2), BR(cx+s/2, cy-s/2), BL(cx-s/2, cy-s/2).
 Nothing in raw/ is touched. Markers are never detector input: they are blanked in blind mode.
+
+Without markers (added 2026-11-17): --scale-from runs/<run>/methods/walkaround/length_scale.json (from
+length_scale.py: one measured length tapped in a few frames) gives the scale, and the board plane is fitted to COLMAP's
+own 3D points near the two tapped points. x runs from point A toward B, the origin is under A, so positions are in that
+frame unless --anchor-ids A_ID B_ID names two targets in targets.json at the tapped points (test boards only; it puts
+the frame on the board layout so targets mode and score.py work). Unanchored runs are blind only. Outputs go to
+methods/walkaround_length/, so the marker results are left as they are. The tags are not looked for at all.
 """
 import argparse
 import json
 import math
 import os
+import struct
 import sys
 import time
 
@@ -259,6 +267,82 @@ def fit_similarity(obs, poses, cams, markers, msize, names, min_angle_deg=1.5):
             "n_points": len(src), "info": info}
 
 
+# ------------------------------------------------------------- no markers: measured length
+def read_points3d(sparse_dir):
+    """COLMAP's points3D.bin -> (N, 3) positions in SfM units. sparse_dir holds the model folders (0, 1, ...);
+    the one with the most points is taken (ponytail: walkaround_sfm keeps the model with the most registered
+    images, which is also the biggest in every run so far; record its id in sfm.json if that ever differs)."""
+    subs = [os.path.join(sparse_dir, d, "points3D.bin") for d in os.listdir(sparse_dir)]
+    path = max((p for p in subs if os.path.isfile(p)), key=os.path.getsize)
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        pts = np.empty((n, 3))
+        for i in range(n):
+            pts[i] = struct.unpack_from("<3d", f.read(43), 8)    # id u64, xyz 3 f64, rgb 3 u8, error f64
+            f.seek(8 * struct.unpack("<Q", f.read(8))[0], 1)     # track: (image_id u32, point2D_idx u32) each
+    return pts
+
+
+def frame_from_length(ls, pts, cam_centres, anchor_xy=None, tol_mm=2.0, iters=400, seed=0):
+    """Board frame without markers. ls: length_scale.json (scale, and points A and B in SfM units). The plane is a
+    RANSAC fit to COLMAP's points within |AB| of the middle of A and B, normal toward the cameras; x runs from A toward
+    B in the plane, origin under A. anchor_xy ((xa, ya), (xb, yb)) in board mm turns and shifts it onto a known layout.
+    Returns s, R, T (board = s R X + T, as fit_similarity) and plane statistics.
+    ponytail: one plane for the whole patch, fine for a flat board; a curved slide needs local planes."""
+    s = float(ls["scale_mm_per_unit"])
+    A, B = np.array(ls["A"]["X_units"], float), np.array(ls["B"]["X_units"], float)
+    P = pts[np.linalg.norm(pts - (A + B) / 2, axis=1) < np.linalg.norm(B - A)]
+    if len(P) < 50:
+        raise SystemExit(f"only {len(P)} COLMAP points near the tapped points: too few to fit the surface")
+    rng, tol, best = np.random.default_rng(seed), tol_mm / s, None
+    for _ in range(iters):
+        p = P[rng.choice(len(P), 3, replace=False)]
+        nrm = np.cross(p[1] - p[0], p[2] - p[0])
+        if np.linalg.norm(nrm) < 1e-12:
+            continue
+        inl = np.abs((P - p[0]) @ (nrm / np.linalg.norm(nrm))) < tol
+        if best is None or inl.sum() > best.sum():
+            best = inl
+    Q = P[best]
+    c = Q.mean(0)
+    nrm = np.linalg.svd(Q - c)[2][-1]
+    if np.median((cam_centres - c) @ nrm) < 0:
+        nrm = -nrm
+    x = (B - A) - ((B - A) @ nrm) * nrm
+    x /= np.linalg.norm(x)
+    R = np.array([x, np.cross(nrm, x), nrm])
+    T = -s * R @ (A - ((A - c) @ nrm) * nrm)
+    if anchor_xy is not None:
+        (xa, ya), (xb, yb) = anchor_xy
+        a = math.atan2(yb - ya, xb - xa)
+        Rz = np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1]])
+        R, T = Rz @ R, Rz @ T + np.array([xa, ya, 0.0])
+    Qb = s * Q @ R.T + T
+    lo, hi = Qb[:, :2].min(0), Qb[:, :2].max(0)       # surface_mask trims stray points and the edges
+    return s, R, T, {"plane_points": int(len(Q)), "plane_candidates": int(len(P)),
+                     "plane_rms_mm": float(np.sqrt(np.mean(Qb[:, 2] ** 2))),
+                     "extent_mm": [float(lo[0]), float(lo[1]), float(hi[0]), float(hi[1])], "inlier_xy": Qb[:, :2]}
+
+
+def surface_mask(xy, Xg, Yg, x0, y0, bin_mm=20.0, min_pts=3, close=1, edge_mm=20.0):
+    """Grid cells over the fitted surface, for blind mode with no board layout: 20 mm bins holding COLMAP points,
+    small gaps closed and holes filled (sparse texture leaves empty bins inside the board), then only cells at least
+    edge_mm in from the covered area's edge, so the surface's own edge (a step down to the background) is not read
+    as a bump. ponytail: tuned on tex1/tex2 only (2026-11-17). 10 mm bins with no closing dropped three bolts on tex2;
+    20 mm kept every bolt (tex2's T08 sat 21 mm in) and left 4 and 2 edge alarms; no single trim separated them."""
+    nb = (int((Xg.max() - x0) // bin_mm) + 1, int((Yg.max() - y0) // bin_mm) + 1)
+    ix = np.floor((xy - [x0, y0]) / bin_mm).astype(int)
+    ok = (ix[:, 0] >= 0) & (ix[:, 0] < nb[0]) & (ix[:, 1] >= 0) & (ix[:, 1] < nb[1])
+    occ = np.zeros((nb[1], nb[0]), int)
+    np.add.at(occ, (ix[ok, 1], ix[ok, 0]), 1)
+    occ = np.pad(occ >= min_pts, close)
+    occ = ndi.binary_closing(occ, iterations=close)[close:occ.shape[0] - close, close:occ.shape[1] - close]
+    cells = ndi.binary_fill_holes(occ)[((Yg - y0) // bin_mm).astype(int).clip(0, nb[1] - 1),
+                                       ((Xg - x0) // bin_mm).astype(int).clip(0, nb[0] - 1)]
+    step = float(Xg[0, 1] - Xg[0, 0]) if Xg.shape[1] > 1 else 1.0
+    return ndi.distance_transform_edt(np.pad(cells, 1))[1:-1, 1:-1] * step >= edge_mm
+
+
 # ------------------------------------------------------------------- plane sweep
 def sample_views(views, P):
     """Intensity of each 3D board point (mm) in each view -> (V, M) float32, NaN when not visible."""
@@ -462,19 +546,27 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
         patch_mm=3.0, patch_n=5, frac=0.7, min_score=0.4, min_views=4, cov_views=6,
         min_height=2.0, ref_win_mm=40.0, search_r=7.0, bg_r=9.0, marker_mm=None, marker_margin=3.0,
         dict_name="DICT_4X4_50", max_tag_images=None, max_tag_rms=3.0, min_tag_angle=1.5,
-        region=None, margin_mm=25.0, flat_std=1.0, verbose=True, views_override=None, view_range=None):
+        region=None, margin_mm=25.0, flat_std=1.0, verbose=True, views_override=None, view_range=None,
+        length_scale=None, anchor_ids=None):
     say = print if verbose else (lambda *a, **k: None)
     if ndi is None:
         raise SystemExit("scipy is required (pip install scipy)")
     t0 = time.time()
     out_dir = os.path.join(run_dir, OUT_SUB)
+    res_dir = os.path.join(run_dir, "methods", "walkaround_length") if length_scale else out_dir
+    os.makedirs(res_dir, exist_ok=True)
     sfm = load_json(os.path.join(out_dir, "sfm.json"))
-    markers, msize = load_markers(load_json(find_board(run_dir, board)), marker_mm)
-    targets = load_targets(run_dir)
+    if length_scale and not anchor_ids:
+        markers, msize, targets = {}, 0.0, []          # no board layout: blind mode in the tapped points' frame
+    else:
+        markers, msize = load_markers(load_json(find_board(run_dir, board)), marker_mm)
+        targets = load_targets(run_dir)
     img_dir = sfm["image_dir"] if os.path.isabs(sfm["image_dir"]) else os.path.join(run_dir, sfm["image_dir"])
+    if not os.path.isdir(img_dir):                     # sfm.json written in WSL and read on Windows, or the run moved
+        img_dir = os.path.join(run_dir, "frames")
 
     # --- 1. tag: fix metric scale and the board plane --------------------------------
-    det = make_detector(dict_name)
+    det = None if length_scale else make_detector(dict_name)
     poses_sfm, cams, obs, scales = {}, {}, {}, {}
     for im in sfm["images"]:
         M = np.array(im["cam_from_world"], float)
@@ -489,49 +581,69 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
                              f"{cam['width']}x{cam['height']}: the frames changed or were rotated since sfm.json was written")
         cams[n] = cv_camera(cam, sc)
         scales[n] = sc
-        d = {i: c for i, c in detect_tags(det, g).items() if i in markers}
+        d = {i: c for i, c in detect_tags(det, g).items() if i in markers} if det else {}
         if d:
             obs[n] = d
     tagged = sorted(obs)
-    say(f"tag seen in {len(tagged)} of {len(names)} registered frames")
-    if max_tag_images and len(tagged) > max_tag_images:
-        keep = np.linspace(0, len(tagged) - 1, max_tag_images).round().astype(int)
-        tagged = [tagged[i] for i in sorted(set(keep))]
-        obs = {n: obs[n] for n in tagged}
-        say(f"using the tag from only {len(tagged)} frames (--max-tag-images)")
-    fit = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged, min_tag_angle)
-    if not fit["ok"]:
-        raise SystemExit(
-            f"the tag fixed only {fit['n_points']} corners (need 4). It must be visible, sharp, in at least "
-            "two frames taken from clearly different positions (rays >1.5 degrees apart). Film the tag "
-            "at the start and again at the end of the sweep.")
-    s, R, T = fit["scale_mm_per_unit"], fit["R"], fit["T"]
-    say(f"tag fit: {fit['n_points']} corners, rms {fit['rms_mm']:.2f} mm, scale {s:.4f} mm per SfM unit")
-    if fit["rms_mm"] > max_tag_rms:
-        raise SystemExit(
-            f"the tag does not fit the board layout: rms {fit['rms_mm']:.2f} mm (limit {max_tag_rms}). "
-            "Either a marker is glued rotated or off its board.json position, or board.json's y axis is "
-            "not 'toward the marker's top edge' (this code assumes it is). Check the marker positions first.")
-    centers = np.array([s * (R @ (-poses_sfm[n][0].T @ poses_sfm[n][1])) + T for n in names])
-    if np.median(centers[:, 2]) < 0:
-        raise SystemExit("the cameras came out below the board: the board frame is mirrored relative to the "
-                         "marker corner order assumed here. See the note at the top of walkaround.py.")
+    inlier_xy = None
+    if length_scale:
+        anchor = None
+        if anchor_ids:
+            tg = {t["id"]: (t["x"], t["y"]) for t in targets}
+            missing = [i for i in anchor_ids if i not in tg]
+            if missing:
+                raise SystemExit(f"--anchor-ids {missing} are not in targets.json")
+            anchor = (tg[anchor_ids[0]], tg[anchor_ids[1]])
+        cen = np.array([-poses_sfm[n][0].T @ poses_sfm[n][1] for n in names])
+        s, R, T, plane = frame_from_length(load_json(length_scale), read_points3d(os.path.join(out_dir, "colmap", "sparse")),
+                                           cen, anchor)
+        say(f"measured-length scale {s:.4f} mm per SfM unit (no tags used); board plane from {plane['plane_points']} of "
+            f"{plane['plane_candidates']} COLMAP points, rms {plane['plane_rms_mm']:.2f} mm")
+        inlier_xy = plane.pop("inlier_xy")
+        if anchor_ids:
+            inlier_xy = None                           # on the board layout: same search area as the marker run
+        scale_report = {"scale_mm_per_unit": s, "from": os.path.abspath(length_scale), "anchor_ids": anchor_ids,
+                        "registered_frames": len(names), **plane}
+    else:
+        say(f"tag seen in {len(tagged)} of {len(names)} registered frames")
+        if max_tag_images and len(tagged) > max_tag_images:
+            keep = np.linspace(0, len(tagged) - 1, max_tag_images).round().astype(int)
+            tagged = [tagged[i] for i in sorted(set(keep))]
+            obs = {n: obs[n] for n in tagged}
+            say(f"using the tag from only {len(tagged)} frames (--max-tag-images)")
+        fit = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged, min_tag_angle)
+        if not fit["ok"]:
+            raise SystemExit(
+                f"the tag fixed only {fit['n_points']} corners (need 4). It must be visible, sharp, in at least "
+                "two frames taken from clearly different positions (rays >1.5 degrees apart). Film the tag "
+                "at the start and again at the end of the sweep.")
+        s, R, T = fit["scale_mm_per_unit"], fit["R"], fit["T"]
+        say(f"tag fit: {fit['n_points']} corners, rms {fit['rms_mm']:.2f} mm, scale {s:.4f} mm per SfM unit")
+        if fit["rms_mm"] > max_tag_rms:
+            raise SystemExit(
+                f"the tag does not fit the board layout: rms {fit['rms_mm']:.2f} mm (limit {max_tag_rms}). "
+                "Either a marker is glued rotated or off its board.json position, or board.json's y axis is "
+                "not 'toward the marker's top edge' (this code assumes it is). Check the marker positions first.")
+        centers = np.array([s * (R @ (-poses_sfm[n][0].T @ poses_sfm[n][1])) + T for n in names])
+        if np.median(centers[:, 2]) < 0:
+            raise SystemExit("the cameras came out below the board: the board frame is mirrored relative to the "
+                             "marker corner order assumed here. See the note at the top of walkaround.py.")
 
-    # does the scale agree between the start and the end of the sweep?
-    drift = None
-    if len(tagged) >= 4:
-        half = len(tagged) // 2
-        fa = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged[:half], min_tag_angle)
-        fb = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged[half:], min_tag_angle)
-        if fa["ok"] and fb["ok"]:
-            drift = {"scale_first_half": fa["scale_mm_per_unit"], "scale_second_half": fb["scale_mm_per_unit"],
-                     "difference_pct": 100.0 * (fb["scale_mm_per_unit"] / fa["scale_mm_per_unit"] - 1.0),
-                     "rms_first_mm": fa["rms_mm"], "rms_second_mm": fb["rms_mm"]}
-            say(f"scale first half vs second half of the tagged frames: {drift['difference_pct']:+.2f} %")
-    scale_report = {"scale_mm_per_unit": s, "rms_mm": fit["rms_mm"], "z_rms_mm": fit["z_rms_mm"],
-                    "n_corners": fit["n_points"], "tagged_frames": len(tagged), "registered_frames": len(names),
-                    "drift": drift, "corners": fit["info"]}
-    with open(os.path.join(out_dir, "scale.json"), "w") as f:
+        # does the scale agree between the start and the end of the sweep?
+        drift = None
+        if len(tagged) >= 4:
+            half = len(tagged) // 2
+            fa = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged[:half], min_tag_angle)
+            fb = fit_similarity(obs, poses_sfm, cams, markers, msize, tagged[half:], min_tag_angle)
+            if fa["ok"] and fb["ok"]:
+                drift = {"scale_first_half": fa["scale_mm_per_unit"], "scale_second_half": fb["scale_mm_per_unit"],
+                         "difference_pct": 100.0 * (fb["scale_mm_per_unit"] / fa["scale_mm_per_unit"] - 1.0),
+                         "rms_first_mm": fa["rms_mm"], "rms_second_mm": fb["rms_mm"]}
+                say(f"scale first half vs second half of the tagged frames: {drift['difference_pct']:+.2f} %")
+        scale_report = {"scale_mm_per_unit": s, "rms_mm": fit["rms_mm"], "z_rms_mm": fit["z_rms_mm"],
+                        "n_corners": fit["n_points"], "tagged_frames": len(tagged), "registered_frames": len(names),
+                        "drift": drift, "corners": fit["info"]}
+    with open(os.path.join(res_dir, "scale.json"), "w") as f:
         json.dump(scale_report, f, indent=1)
 
     # --- 2. views in board millimetres ------------------------------------------------
@@ -580,6 +692,8 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
     if mode in ("both", "blind"):
         if region:
             x0, y0, x1, y1 = region
+        elif not markers and not targets:
+            x0, y0, x1, y1 = scale_report["extent_mm"]   # the fitted plane's extent (2nd to 98th percentile)
         else:
             allx = [p[0] for p in markers.values()] + [t["x"] for t in targets]
             ally = [p[1] for p in markers.values()] + [t["y"] for t in targets]
@@ -592,6 +706,8 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
         skip = np.zeros(Xg.shape, bool)
         for cx, cy in markers.values():
             skip |= (np.abs(Xg - cx) <= pad) & (np.abs(Yg - cy) <= pad)
+        if inlier_xy is not None and not region:      # no layout: only where COLMAP found the surface, off its edges
+            skip |= ~surface_mask(inlier_xy, Xg, Yg, x0, y0)
         seen_g = seen_count(views, np.stack([Xg.ravel(), Yg.ravel()], 1)).reshape(Xg.shape)
         active = (seen_g >= cov_views) & ~skip
         heights_b = np.arange(h_min, h_max + 1e-9, step_b)
@@ -604,12 +720,12 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
                 cov_ids.append(t["id"])
         result["candidates"] = {"candidates": cands, "covered_targets": cov_ids,
                                 "covered_area_cm2": float(active.sum() * grid_mm ** 2 / 100.0)}
-        np.savez_compressed(os.path.join(out_dir, "heightmap.npz"), xs=xs_b, ys=ys_b, h=h, score=sc,
+        np.savez_compressed(os.path.join(res_dir, "heightmap.npz"), xs=xs_b, ys=ys_b, h=h, score=sc,
                             n_views=nv, rel=rel, active=active)
         say(f"blind done: {len(cands)} candidate(s), {active.sum()} cells scored ({time.time() - t0:.0f} s)")
-        with open(os.path.join(out_dir, "candidates.json"), "w") as f:
+        with open(os.path.join(res_dir, "candidates.json"), "w") as f:
             json.dump(result["candidates"], f, indent=1)
-        draw_map(os.path.join(out_dir, "heightmap.png"), xs_b, ys_b, np.where(active, rel, np.nan),
+        draw_map(os.path.join(res_dir, "heightmap.png"), xs_b, ys_b, np.where(active, rel, np.nan),
                  targets, est_for_map, markers, msize)
 
     # --- 5. report ---------------------------------------------------------------------
@@ -619,7 +735,7 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
                    "mean_error_mm": float(np.mean(errs)) if errs else None,
                    "mean_abs_error_mm": float(np.mean(np.abs(errs))) if errs else None,
                    "max_abs_error_mm": float(np.max(np.abs(errs))) if errs else None}
-        with open(os.path.join(out_dir, "heights.json"), "w") as f:
+        with open(os.path.join(res_dir, "heights.json"), "w") as f:
             json.dump({"summary": summary, "targets": result["targets"]}, f, indent=1)
         say(f"\n{'target':8}{'measured':>10}{'estimate':>10}{'error':>8}{'score':>7}{'views':>7}  note")
         for r in result["targets"]:
@@ -631,7 +747,7 @@ def run(run_dir, board=None, mode="both", max_views=30, max_width=2400, hp_sigma
                 f"{'' if r['covered'] else 'NOT COVERED ':}{'' if r['ref_from'] == 'local_median' else 'no local board (plain?) '}")
         if summary["mean_abs_error_mm"] is not None:
             say(f"mean abs error {summary['mean_abs_error_mm']:.2f} mm, bias {summary['mean_error_mm']:+.2f} mm")
-    with open(os.path.join(out_dir, "diagnostics.json"), "w") as f:
+    with open(os.path.join(res_dir, "diagnostics.json"), "w") as f:
         json.dump({"views": [v.name for v in views], "seconds": time.time() - t0,
                    "settings": {"max_views": max_views, "max_width": max_width, "hp_sigma": hp_sigma,
                                 "heights_mm": [h_min, h_max], "patch_mm": patch_mm, "patch_n": patch_n,
@@ -661,11 +777,16 @@ def main(argv=None):
                          "keep this well above the tallest target (run B2 missed its 10 mm bolt at 12)")
     ap.add_argument("--view-range", type=float, nargs=2, metavar=("LO", "HI"),
                     help="take the sweep's views only from this part of the video, as fractions 0 to 1 (e.g. 0 0.33)")
+    ap.add_argument("--scale-from", help="length_scale.json: scale from a measured length, no tags (outputs to methods/walkaround_length)")
+    ap.add_argument("--anchor-ids", nargs=2, metavar=("A_ID", "B_ID"),
+                    help="with --scale-from: the targets.json ids at tapped points A and B, to put the frame on the board layout")
     a = ap.parse_args(argv)
+    if a.anchor_ids and not a.scale_from:
+        ap.error("--anchor-ids only goes with --scale-from")
     run(a.run, board=a.board, mode=a.mode, max_views=a.max_views, max_width=a.max_width,
         min_score=a.min_score, min_height=a.min_height, grid_mm=a.grid_mm, patch_mm=a.patch_mm,
         max_tag_images=a.max_tag_images, marker_mm=a.marker_mm, dict_name=a.dict_name, region=a.region,
-        h_min=a.h_min, h_max=a.h_max, view_range=a.view_range)
+        h_min=a.h_min, h_max=a.h_max, view_range=a.view_range, length_scale=a.scale_from, anchor_ids=a.anchor_ids)
 
 
 if __name__ == "__main__":
