@@ -1,0 +1,9 @@
+{
+  "name": "cpsc_slide_projection",
+  "what": "Slide projection gauge: a projection that fits one of the three ring gauges must not stand taller than the gauge's thickness above the surrounding surface.",
+  "source": "CPSC Handbook (July 2025) Figure B2 and test B.2.3. The drawing is a plan view, so 1/8 in being the thickness is inferred from the B.2.3 text.",
+  "unit": "in",
+  "thickness_max": 0.125,
+  "hole_max": 1.25,
+  "outside_max": 2.0
+}

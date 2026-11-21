@@ -13,11 +13,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import equip
 import geometry as g
 from methods.grazing import PPM
 
 ROOT = Path(__file__).resolve().parent
 RUN = ROOT / "demo_run" / "synthetic-grazing"
+Q = equip.load("slide")["qualifying_mm"]
 
 
 def sh(*cmd):
@@ -60,7 +62,7 @@ for c in cands:
 rows = "".join(
     f"<tr><td>{t['id']}</td><td>{t['measured_mm']:g}</td><td>{heights.get(t['id'], {}).get('shadow_mm', '-')}</td>"
     f"<td>{heights.get(t['id'], {}).get('est_height_mm', '-')}</td>"
-    f"<td class={results[t['id']]['outcome']}>{results[t['id']]['outcome'] if t['measured_mm'] >= 3.2 else 'below 3.2: not required'}</td></tr>"
+    f"<td class={results[t['id']]['outcome']}>{results[t['id']]['outcome'] if t['measured_mm'] >= Q else f'below {Q:g}: not required'}</td></tr>"
     for t in board["targets"])
 Path(ROOT / "demo_report.html").write_text(f"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width">
 <title>SlideScan Demo</title>
@@ -69,14 +71,14 @@ Path(ROOT / "demo_report.html").write_text(f"""<!doctype html><meta charset=utf-
 .row{{display:flex;gap:12px;flex-wrap:wrap}}.row figure{{flex:1 1 320px;margin:0}}img{{width:100%}}
 td,th{{padding:4px 12px;text-align:left}}.hit{{color:#2a9d3f}}.miss{{color:#d33}}code{{font-size:.9em}}</style>
 <h1>SlideScan: finding bolts that stick out of a playground slide</h1>
-<p>Low-angle light makes any bolt taller than the slide's limit (3.2 mm) cast a shadow. Take a photo with the light off,
+<p>Low-angle light makes any bolt taller than the slide's limit ({Q:g} mm) cast a shadow. Take a photo with the light off,
 one with it on, subtract: the shadows are what's left. Shadow length gives the bolt's height.
 <b>Synthetic board</b> (shadows drawn at known lengths), not a real scan yet. Same code will run on phone photos.</p>
 <div class=row><figure><img src="{png(photo)}"><figcaption>1. Phone photo, grazing light on (board rectified from ArUco markers)</figcaption></figure>
 <figure><img src="{png(found)}"><figcaption>2. Light-on minus light-off. Red = what the detector flagged, with its height estimate</figcaption></figure></div>
 <h2>Measured vs. estimated height</h2>
 <table><tr><th>Bolt<th>Caliper (mm)<th>Shadow (mm)<th>Estimated (mm)<th>Result</tr>{rows}</table>
-<h2>Gate A (zero misses at 3.2 mm and taller)</h2><pre>{chr(10).join(gate)}</pre>
+<h2>Gate A (zero misses at {Q:g} mm and taller)</h2><pre>{chr(10).join(gate)}</pre>
 <p><small>Rebuild: <code>python demo.py</code> &middot; 3D model of the real board: <code>board_view.html</code></small></p>
 """, encoding="utf-8")
 print("demo_report.html")

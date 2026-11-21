@@ -1,0 +1,11 @@
+{
+  "name": "cpsc_projection_rings",
+  "what": "Three ring gauges for the general projection test: a projection that passes through the hole and beyond the gauge face is a hazardous protrusion.",
+  "source": "CPSC Public Playground Safety Handbook (July 2025) Figure B1; ASTM F1487-25 Fig. A1.10 (same sizes). Sizes read from the figures Khalisa Phillips sent, 2026-11-13.",
+  "unit": "in",
+  "gauges": [
+    {"id": "small",  "hole": 0.50, "outside": 1.00, "thickness": 0.25},
+    {"id": "medium", "hole": 1.50, "outside": 2.00, "thickness": 0.75},
+    {"id": "large",  "hole": 3.00, "outside": 3.50, "thickness": 1.50}
+  ]
+}

@@ -8,11 +8,13 @@ candidates.json (every method writes it, board mm):
   {"candidates": [{"x_mm", "y_mm", "score", "est_height_mm" (or null), "image"}],
    "covered_targets": [target ids the method looked at], "covered_area_cm2": board area it looked at}
 --min-est MM drops candidates whose est_height_mm is below MM before scoring (a candidate with no height estimate is
-kept), so the walkaround's detection cut can be tried without re-running it. The cut is a decision about the method,
+kept), so the walkaround's detection cut can be tried without re-running it (--min-est profile uses the cut in the
+equipment profile). The cut is a decision about the method,
 not a measurement: pick it on some runs, then score other runs with it. results.json records it.
 A candidate within --radius mm of a target hits it; each target is hit at most once (repeats from other images
 are duplicates, not alarms). Near a decoy (id D..) = decoy alarm; near nothing = background alarm.
-Outcome per target: hit, miss (covered, no hit) or not covered. Qualifying = measured_mm >= 3.2.
+Outcome per target: hit, miss (covered, no hit) or not covered. Qualifying = measured_mm >= qualifying_mm (3.2 in
+equipment/slide.json, which also holds the other tuned numbers: match radius, low cut, the walkaround's --min-est).
 A condition is meta.json minus date, repeat, operator and notes; runs that share it are repeats.
 """
 import argparse
@@ -22,13 +24,13 @@ import math
 from collections import Counter, defaultdict
 from pathlib import Path
 
-QUAL_MM = 3.2
-# ponytail: starting guess, same as walkaround's --min-height. Nothing is required below QUAL_MM, but a hit on a
-# flush or 1 mm bolt means the method flags a bump at every bolt without telling 0 from 5 mm, which Gate A cannot see.
-LOW_MM = 2.0
-# ponytail: starting guess. A 1/4 in bolt is 6.35 mm wide and mapped bolt heads land 1-6 mm off on the
-# practice runs; tune on real data with each hit's dist_mm in results.json.
-RADIUS_MM = 10.0
+import equip
+
+# The numbers live in equipment/slide.json (with the reason for each). They are the slide's, not universal.
+PROFILE = equip.load("slide")
+QUAL_MM = PROFILE["qualifying_mm"]
+LOW_MM = PROFILE["low_mm"]
+RADIUS_MM = PROFILE["match_radius_mm"]
 NOT_CONDITION = {"date", "repeat", "operator", "notes"}
 
 
@@ -159,8 +161,9 @@ def main():
     p.add_argument("--method", help="methods/<name> to score; default: every method found")
     p.add_argument("--gate", action="store_true", help="also print the Gate A check")
     p.add_argument("--radius", type=float, default=RADIUS_MM, help="match radius in mm")
-    p.add_argument("--min-est", type=float, help="drop candidates whose estimated height is below this, mm")
+    p.add_argument("--min-est", help="drop candidates whose estimated height is below this, mm; 'profile' = the equipment profile's cut")
     args = p.parse_args()
+    args.min_est = PROFILE["flag_min_est_mm"] if args.min_est == "profile" else float(args.min_est) if args.min_est else None
     runs = [Path(r) for a in args.runs for r in (sorted(glob.glob(a)) or [a]) if Path(r).is_dir()]
     methods = [args.method] if args.method else sorted({m.parent.name for r in runs
                                                          for m in r.glob("methods/*/candidates.json")})

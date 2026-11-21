@@ -1,0 +1,21 @@
+{
+  "name": "slide",
+  "check": "projection",
+  "gauges": ["cpsc_projection_rings", "cpsc_slide_projection"],
+  "limit_in": 0.125,
+  "qualifying_mm": 3.2,
+  "low_mm": 2.0,
+  "match_radius_mm": 10.0,
+  "flag_min_est_mm": 5.5,
+  "calibration": {
+    "est_height_mm": "3.35 + 1.00 * true_height_mm",
+    "fitted_on": "walkaround runs A, B, B2, tex1, tex2 on the flat matte bench board, one phone, one board; not a general constant",
+    "residual_mm": "0.7 to 0.8 on average (two runs)"
+  },
+  "notes": {
+    "qualifying_mm": "The bench's required-bolt threshold: the 3.2 mm bolt is the stand-in for the 1/8 in (3.175 mm) limit. Score.py's Gate A counts targets at or above this.",
+    "low_mm": "Starting guess. Targets under this are reported next to Gate A, not part of it.",
+    "match_radius_mm": "Starting guess. A candidate within this distance of a target hits it.",
+    "flag_min_est_mm": "The walkaround's detection cut (score.py --min-est profile). About 2.1 mm true height through the calibration above, deliberately under the limit so borderline bumps get flagged. Picked on two runs, held on two others."
+  }
+}
