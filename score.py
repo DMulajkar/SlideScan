@@ -27,7 +27,7 @@ from pathlib import Path
 import equip
 
 # The numbers live in equipment/slide.json (with the reason for each). They are the slide's, not universal.
-PROFILE = equip.load("slide")
+PROFILE = equip.validate(equip.load("slide"))  # default; --equipment picks another
 QUAL_MM = PROFILE["qualifying_mm"]
 LOW_MM = PROFILE["low_mm"]
 RADIUS_MM = PROFILE["match_radius_mm"]
@@ -38,7 +38,7 @@ def per_100cm2(n, area):
     return round(100 * n / area, 3) if area else None
 
 
-def score(run, method, radius=RADIUS_MM, min_est=None):
+def score(run, method, radius=RADIUS_MM, min_est=None, qual=QUAL_MM):
     """Grade one run's methods/<method>/candidates.json; writes and returns results.json."""
     run = Path(run)
     board = json.loads((run / "targets.json").read_text())["targets"]
@@ -61,7 +61,7 @@ def score(run, method, radius=RADIUS_MM, min_est=None):
         if t["id"].startswith("D"):
             continue
         outcome = "hit" if t["id"] in hits else "miss" if t["id"] in covered else "not covered"
-        targets[t["id"]] = {"height_mm": t["measured_mm"], "qualifying": t["measured_mm"] >= QUAL_MM,
+        targets[t["id"]] = {"height_mm": t["measured_mm"], "qualifying": t["measured_mm"] >= qual,
                             "outcome": outcome, **hits.get(t["id"], {})}
     res = {"method": method, "radius_mm": radius, "min_est_mm": min_est, "targets": targets,
            "decoy_alarms": dict(decoy), "background_alarms": bg, "covered_area_cm2": area,
@@ -94,25 +94,26 @@ def smallest(cells):
     return best
 
 
-def low(cells):
-    """(hits, covered target-repeats) on targets under LOW_MM. Reported next to Gate A, not part of it."""
-    q = [v for h, v in cells.items() if h < LOW_MM]
+def low(cells, low_mm=LOW_MM):
+    """(hits, covered target-repeats) on targets under low_mm. Reported next to Gate A, not part of it."""
+    q = [v for h, v in cells.items() if h < low_mm]
     return sum(v[0] for v in q), sum(v[1] for v in q)
 
 
-def gate(cells):
+def gate(cells, qual=QUAL_MM):
     """Gate A over one condition: (hits, n) on qualifying covered target-repeats, qualifying not covered."""
-    q = [v for h, v in cells.items() if h >= QUAL_MM]
+    q = [v for h, v in cells.items() if h >= qual]
     return sum(v[0] for v in q), sum(v[1] for v in q), sum(v[2] for v in q)
 
 
-def report(runs, method, radius=RADIUS_MM, show_gate=False, min_est=None):
+def report(runs, method, radius=RADIUS_MM, show_gate=False, min_est=None, prof=PROFILE):
+    qual, low_mm = prof["qualifying_mm"], prof["low_mm"]
     groups = defaultdict(list)  # condition -> results of its repeats
     for run in runs:
         if (run / "methods" / method / "candidates.json").exists():
             meta = json.loads((run / "meta.json").read_text())
             key = tuple(sorted((k, str(v)) for k, v in meta.items() if k not in NOT_CONDITION))
-            groups[key].append(score(run, method, radius, min_est))
+            groups[key].append(score(run, method, radius, min_est, qual))
     n_runs = sum(map(len, groups.values()))
     cut = f", candidates below {min_est:g} mm estimated height dropped" if min_est is not None else ""
     print(f"\n== method {method}: {n_runs} runs scored, {len(runs) - n_runs} without methods/{method}/candidates.json{cut}")
@@ -139,18 +140,18 @@ def report(runs, method, radius=RADIUS_MM, show_gate=False, min_est=None):
               + "".join(f"{f'{c[h][0]}/{c[h][1]}' if h in c and c[h][1] else '-':>7}" for h in heights)
               + f"  {(fmt(s) + ' mm') if s is not None else 'none':>17}  {f'{dec}/{bg}':>15}  {rate:>11}")
     if show_gate:
-        print(f"\nGate A: zero misses on qualifying targets (measured >= {QUAL_MM:g} mm) that were covered, in every repeat")
-        print(f"{'condition':<{w}}  reps  hits/n  not covered  hits <{LOW_MM:g} mm  result  95% bound on miss rate")
+        print(f"\nGate A: zero misses on qualifying targets (measured >= {qual:g} mm) that were covered, in every repeat")
+        print(f"{'condition':<{w}}  reps  hits/n  not covered  hits <{low_mm:g} mm  result  95% bound on miss rate")
         for label, res, c in zip(labels, groups.values(), cells):
-            k, n, nc = gate(c)
+            k, n, nc = gate(c, qual)
             ok = n and k == n
             # rule of three: zero misses in n independent trials -> 95% upper bound about 3/n (rough below n = 30)
             bound = f"<= 3/{n} = {3 / n:.2f} (rule of three)" if ok else "-"
-            lk, ln = low(c)
-            print(f"{label:<{w}}  {len(res):>4}  {f'{k}/{n}':>6}  {nc:>11}  {f'{lk}/{ln}':>{9 + len(f'{LOW_MM:g}')}}  "
+            lk, ln = low(c, low_mm)
+            print(f"{label:<{w}}  {len(res):>4}  {f'{k}/{n}':>6}  {nc:>11}  {f'{lk}/{ln}':>{9 + len(f'{low_mm:g}')}}  "
                   f"{'PASS' if ok else 'FAIL':>6}  {bound}")
             if lk:
-                print(f"{'':<{w}}  note: {lk} of {ln} covered targets under {LOW_MM:g} mm were flagged, so a PASS here "
+                print(f"{'':<{w}}  note: {lk} of {ln} covered targets under {low_mm:g} mm were flagged, so a PASS here "
                       f"does not show the method separates a flush bolt from a real protrusion")
     return groups
 
@@ -160,17 +161,20 @@ def main():
     p.add_argument("runs", nargs="+", help="run folders; globs like runs/* are expanded here (PowerShell doesn't)")
     p.add_argument("--method", help="methods/<name> to score; default: every method found")
     p.add_argument("--gate", action="store_true", help="also print the Gate A check")
-    p.add_argument("--radius", type=float, default=RADIUS_MM, help="match radius in mm")
+    p.add_argument("--equipment", default="slide", help=f"equipment profile in equipment/ ({', '.join(equip.names())})")
+    p.add_argument("--radius", type=float, help="match radius in mm (default: the profile's)")
     p.add_argument("--min-est", help="drop candidates whose estimated height is below this, mm; 'profile' = the equipment profile's cut")
     args = p.parse_args()
-    args.min_est = PROFILE["flag_min_est_mm"] if args.min_est == "profile" else float(args.min_est) if args.min_est else None
+    prof = equip.validate(equip.load(args.equipment))
+    radius = args.radius if args.radius is not None else prof["match_radius_mm"]
+    args.min_est = prof["flag_min_est_mm"] if args.min_est == "profile" else float(args.min_est) if args.min_est else None
     runs = [Path(r) for a in args.runs for r in (sorted(glob.glob(a)) or [a]) if Path(r).is_dir()]
     methods = [args.method] if args.method else sorted({m.parent.name for r in runs
                                                          for m in r.glob("methods/*/candidates.json")})
     if not methods:
         raise SystemExit("no methods/<name>/candidates.json in any run")
     for m in methods:
-        report(runs, m, args.radius, args.gate, args.min_est)
+        report(runs, m, radius, args.gate, args.min_est, prof)
 
 
 if __name__ == "__main__":

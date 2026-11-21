@@ -1,4 +1,5 @@
 """python test_profile.py -- the slide profile and gauge files load, agree with the CPSC figures, and score.py reads them."""
+import checks
 import equip
 import score as sc
 
@@ -21,4 +22,26 @@ try:
     raise AssertionError("missing profile should exit")
 except SystemExit:
     pass
+
+# every shipped profile is usable (this is what a contributor's new equipment/<name>.json has to pass)
+assert "slide" in equip.names()
+for n in equip.names():
+    equip.validate(equip.load(n))
+assert set(checks.methods_for("projection")) >= {"walkaround", "grazing"}
+for bad in ({}, {**p, "check": "gap"}, {**p, "gauges": ["nope"]}):
+    try:
+        equip.validate(bad)
+        raise AssertionError(f"should reject {bad.get('check')}")
+    except ValueError:
+        pass
+try:
+    checks.methods_for("gap")
+    raise AssertionError("unknown check should exit")
+except SystemExit:
+    pass
+
+# score.py takes the thresholds as arguments, so another equipment's numbers change the gate, not just the defaults
+cells = {0: [1, 1, 0], 4.0: [1, 1, 0], 6.0: [0, 1, 0]}
+assert sc.gate(cells) == (1, 2, 0) and sc.gate(cells, 5.0) == (0, 1, 0)
+assert sc.low(cells) == (1, 1) and sc.low(cells, 5.0) == (2, 2)
 print("ok")
