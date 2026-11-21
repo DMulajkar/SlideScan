@@ -5,3 +5,4 @@ yolo/data/
 yolo/*.log
 yolo/*.exit
 *.pt
+*.egg-info/

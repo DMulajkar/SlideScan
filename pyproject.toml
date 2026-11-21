@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slidescan"
+version = "0.1.0"
+description = "Phone video of a surface to a list of bumps that stick out of it, for a gauge to check (playground equipment)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["numpy", "opencv-python", "pillow", "pillow-heif"]
+
+[project.optional-dependencies]
+sfm = ["pycolmap", "scipy"]   # walkaround method: camera poses from video (no Linux ARM wheel for pycolmap)
+yolo = ["ultralytics"]        # yolo/ detector experiment only. Ultralytics is AGPL-3.0, see yolo/README.md
+
+[project.scripts]
+slidescan = "slidescan:main"
+slidescan-score = "score:main"
+
+# ponytail: flat modules stay where they are, so install with `pip install -e .` (equipment/, gauges/ and board.json
+# are found next to the code). A non-editable install would miss them; make a src/ package if that is ever needed.
+[tool.setuptools]
+py-modules = ["slidescan", "score", "geometry", "equip", "checks", "replay", "demo", "make_public_markers"]
+packages = ["methods"]

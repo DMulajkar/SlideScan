@@ -17,5 +17,5 @@ What it showed and what it did not: see the wiki pages "Stage-1 Bolt Detector (Y
 Short version: pooled over the four held-out runs a proposal landed on the bolt in 637 to 649 of 652 at confidence 0.05 across the three pixel sizes;
 run A (the one held-out run that differs in texture and orientation) 128 to 140 of 142. Likely inflated for the other three (same board, bolts and the
 handwritten numbers beside each bolt as the training runs). The pixel sizes are a downscale proxy for 50 cm, 1 m and 2 m, not real far shots.
-Ultralytics YOLO is AGPL-3.0: the licence question for Alan is open.
+**Licence:** Ultralytics YOLO is AGPL-3.0, and the rest of this repository is MIT. `yolo/` is an optional extra (`pip install -e ".[yolo]"`): only `train_eval.py` imports `ultralytics`, and no weights are committed. If you run or distribute something built on `ultralytics`, its AGPL terms apply to that work (my understanding, not legal advice; check [Ultralytics' licence page](https://www.ultralytics.com/license)). Whether the project's university or advisor places limits on releasing it is still an open question for the project lead. torchvision's detectors (BSD) are the alternative if AGPL is a problem.
 `data/` (111 MB), logs and `*.pt` weights are git-ignored and stay on the PC.

@@ -17,14 +17,14 @@ SlideScan/
   test_walkaround.py          self-test on a synthetic board
   WALKAROUND_README.md        this file
 ```
-Copy the folder contents over `C:\Users\mmtes\Desktop\SlideScan`. No existing file is overwritten.
+Copy the folder contents into your SlideScan folder. No existing file is overwritten.
 
 ## Install (once)
 In the WSL venv (`~/vslam/.venv`, Python 3.12):
 ```
 pip install pycolmap opencv-python numpy scipy
 ```
-Run **both** steps in WSL; the run folder is at `/mnt/c/Users/mmtes/Desktop/SlideScan/runs/<run>`.
+Run **both** steps in WSL; the run folder is at `/mnt/c/Users/<you>/Desktop/SlideScan/runs/<run>`.
 Copy the run's frames into WSL's own disk first: running on `/mnt/c` was slow and COLMAP crashed WSL until `.wslconfig` had
 `memory=20GB`, `swap=16GB`, and the run used `--max-image-size 2400 --threads 4`. pycolmap's wheels are CPU-only; that is fine, only sparse SfM runs.
 pycolmap has no Linux ARM wheel, so this does not install on an ARM server (such as Oracle's free A1 box) without building it from source.

@@ -1,9 +1,28 @@
-# SlideScan — Phase 1: measurement bench and data logging
+# SlideScan
 
-Phase 1 of the slide-protrusion build roadmap (Second-Brain: `02 Projects/Slide Protrusion Detection - Build Roadmap.md`).
-Everything later (signal tests, detectors) reads the run folders this produces, so nothing has to be recaptured.
+Film a surface with a phone and get a list of spots that stick out of it, to be checked with the real playground-safety
+gauge. Built first for bolts on slides; the gauges and rules for each kind of equipment are data files in `equipment/`
+and `gauges/`, so other equipment can be added (see `CONTRIBUTING.md`). It flags spots for an inspector; it does not pass
+or fail equipment, and a phone cannot measure height to 1/8 in reliably.
 
-**Done when:** one practice run is captured, `check` passes on it, and someone new can read the run folder and know what was captured.
+## What has been shown
+Four videos of one flat matte board with seven bolts (0 to 10 mm), one phone. Every bolt of 3.2 mm or taller was found
+every time; heights read about 3.4 mm high by a steady offset. Not shown: decoys, glossy or curved surfaces, another
+board, a real slide, equipment other than slides. Those four runs are the same bolts on one board, so this is not a
+measured miss rate.
+
+## Install
+```
+pip install -e .            # core: numpy, opencv, pillow
+pip install -e ".[sfm]"     # walkaround method: pycolmap, scipy
+```
+`SCHEMA.md` is the run-folder format every tool reads and writes. `CONTRIBUTING.md` says how to run the tests and add
+equipment, a method or a hazard check.
+
+## Origin: Phase 1, measurement bench and data logging
+Phase 1 of a slide-protrusion build roadmap. Everything later (signal tests, detectors) reads the run folders this
+produces, so nothing has to be recaptured. **Done when:** one practice run is captured, `check` passes on it, and someone
+new can read the run folder and know what was captured.
 
 ## Quick start: height map from one phone video (walk-around method)
 This is the method that has worked so far: film one slow walk-around of the board, COLMAP gets the camera poses, the printed markers fix the scale, and a plane sweep reads the height of every spot on the board. Details and limits: `WALKAROUND_README.md`.
